@@ -92,11 +92,12 @@ async def google_login(body: GoogleLoginRequest, db: DBSession) -> TokenPair:
                 google_sub=identity.sub,
                 full_name=identity.full_name,
                 avatar_url=identity.picture,
+                is_active=True,
             )
             db.add(user)
 
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account disabled")
+    if user.is_active is False:
+        user.is_active = True
 
     await db.commit()
     await db.refresh(user)
