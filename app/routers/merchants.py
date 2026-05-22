@@ -6,7 +6,10 @@ from sqlalchemy import select
 from app.models.merchant import Merchant, MerchantMember, MemberRole
 from app.models.user import User
 from app.schemas.merchant import (
+    MemberInvite,
+    MemberRoleUpdate,
     MerchantCreate,
+    MerchantMemberOut,
     MerchantOut,
     MerchantUpdate,
 )
@@ -119,3 +122,127 @@ async def update_merchant(
     await db.commit()
     await db.refresh(ctx.merchant)
     return ctx.merchant
+
+
+def _member_to_out(member: MerchantMember, user: User) -> dict:
+    return {
+        "id": member.id,
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": member.role,
+        "joined_at": member.joined_at,
+    }
+
+
+@router.get("/{merchant_id}/members", response_model=list[MerchantMemberOut])
+async def list_members(
+    merchant_id: uuid.UUID, db: DBSession, ctx: CurrentMerchantContext
+) -> list[dict]:
+    if ctx.merchant.id != merchant_id:
+        raise HTTPException(status_code=400, detail="merchant_id mismatch")
+    res = await db.execute(
+        select(MerchantMember, User)
+        .join(User, User.id == MerchantMember.user_id)
+        .where(MerchantMember.merchant_id == merchant_id)
+        .order_by(MerchantMember.joined_at.asc())
+    )
+    return [_member_to_out(member, user) for member, user in res.all()]
+
+
+@router.post(
+    "/{merchant_id}/members/invite",
+    response_model=MerchantMemberOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def invite_member(
+    merchant_id: uuid.UUID,
+    body: MemberInvite,
+    db: DBSession,
+    ctx: MerchantContext = Depends(require_role("owner", "admin")),
+) -> dict:
+    if ctx.merchant.id != merchant_id:
+        raise HTTPException(status_code=400, detail="merchant_id mismatch")
+
+    res = await db.execute(select(User).where(User.email == body.email.lower()))
+    invitee = res.scalar_one_or_none()
+    if not invitee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user with that email not found (must sign up first)",
+        )
+
+    # Conflict if already a member
+    res = await db.execute(
+        select(MerchantMember).where(
+            MerchantMember.merchant_id == merchant_id,
+            MerchantMember.user_id == invitee.id,
+        )
+    )
+    if res.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already a member")
+
+    membership = MerchantMember(
+        merchant_id=merchant_id,
+        user_id=invitee.id,
+        role=body.role,
+        invited_by=ctx.member.user_id,
+    )
+    db.add(membership)
+    await db.commit()
+    await db.refresh(membership)
+    return _member_to_out(membership, invitee)
+
+
+@router.patch("/{merchant_id}/members/{user_id}", response_model=MerchantMemberOut)
+async def change_member_role(
+    merchant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: MemberRoleUpdate,
+    db: DBSession,
+    ctx: MerchantContext = Depends(require_role("owner")),
+) -> dict:
+    if ctx.merchant.id != merchant_id:
+        raise HTTPException(status_code=400, detail="merchant_id mismatch")
+
+    res = await db.execute(
+        select(MerchantMember, User)
+        .join(User, User.id == MerchantMember.user_id)
+        .where(
+            MerchantMember.merchant_id == merchant_id, MerchantMember.user_id == user_id
+        )
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="member not found")
+    member, user = row
+    member.role = body.role
+    await db.commit()
+    await db.refresh(member)
+    return _member_to_out(member, user)
+
+
+@router.delete("/{merchant_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_member(
+    merchant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: DBSession,
+    ctx: MerchantContext = Depends(require_role("owner")),
+) -> None:
+    if ctx.merchant.id != merchant_id:
+        raise HTTPException(status_code=400, detail="merchant_id mismatch")
+    if ctx.member.user_id == user_id:
+        raise HTTPException(
+            status_code=400, detail="cannot remove yourself; transfer ownership first"
+        )
+
+    res = await db.execute(
+        select(MerchantMember).where(
+            MerchantMember.merchant_id == merchant_id, MerchantMember.user_id == user_id
+        )
+    )
+    member = res.scalar_one_or_none()
+    if not member:
+        raise HTTPException(status_code=404, detail="member not found")
+    await db.delete(member)
+    await db.commit()

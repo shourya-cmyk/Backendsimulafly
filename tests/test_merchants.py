@@ -171,3 +171,117 @@ async def test_patch_merchant_requires_owner_or_admin(auth_client, test_user, db
         json={"display_name": "New Name"},
     )
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_members_returns_all_members_with_email(auth_client, test_user, db_session):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Team Test", "display_name": "Team"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.get(
+        f"/api/v1/merchants/{mid}/members", headers={"X-Merchant-Id": mid}
+    )
+    assert r.status_code == 200
+    members = r.json()
+    assert len(members) == 1
+    assert members[0]["email"] == test_user.email
+    assert members[0]["role"] == "owner"
+
+
+@pytest.mark.asyncio
+async def test_invite_existing_user_adds_membership(auth_client, test_user, db_session):
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    invitee = User(email="invitee@example.com", hashed_password=hash_password("password123"))
+    db_session.add(invitee)
+    await db_session.commit()
+
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Inv Test", "display_name": "Inv"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.post(
+        f"/api/v1/merchants/{mid}/members/invite",
+        headers={"X-Merchant-Id": mid},
+        json={"email": "invitee@example.com", "role": "admin"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["email"] == "invitee@example.com"
+    assert body["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_invite_unknown_email_returns_404(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Unk", "display_name": "Unk"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.post(
+        f"/api/v1/merchants/{mid}/members/invite",
+        headers={"X-Merchant-Id": mid},
+        json={"email": "nobody@example.com", "role": "staff"},
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_change_role_requires_owner(auth_client, db_session):
+    from app.core.security import hash_password
+    from app.models.user import User
+    from app.models.merchant import Merchant, MerchantMember, MemberRole
+
+    # Owner creates merchant; admin tries to change another member's role
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Role Test", "display_name": "Role"}
+    )
+    mid = r.json()["id"]
+
+    other = User(email="other@example.com", hashed_password=hash_password("password123"))
+    db_session.add(other)
+    await db_session.commit()
+    await db_session.refresh(other)
+
+    # Add other as admin via invite
+    await auth_client.post(
+        f"/api/v1/merchants/{mid}/members/invite",
+        headers={"X-Merchant-Id": mid},
+        json={"email": "other@example.com", "role": "admin"},
+    )
+
+    # Sign in as `other` and try to demote the owner — should be 403
+    from app.core.security import create_access_token
+    other_token = create_access_token(str(other.id))
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as cl:
+        cl.headers.update({"Authorization": f"Bearer {other_token}", "X-Merchant-Id": mid})
+        # Find the owner's user_id
+        list_r = await cl.get(f"/api/v1/merchants/{mid}/members")
+        owner_uid = next(m["user_id"] for m in list_r.json() if m["role"] == "owner")
+
+        r = await cl.patch(
+            f"/api/v1/merchants/{mid}/members/{owner_uid}",
+            json={"role": "staff"},
+        )
+        assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_remove_member_owner_cannot_remove_self(auth_client, test_user):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Self", "display_name": "Self"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.delete(
+        f"/api/v1/merchants/{mid}/members/{test_user.id}",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 400
+    assert "cannot remove" in r.json()["detail"].lower()
