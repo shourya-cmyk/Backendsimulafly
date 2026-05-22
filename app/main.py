@@ -17,6 +17,7 @@ from app.routers import (
     auth,
     cart,
     chat,
+    events,
     merchant_products,
     merchants,
     notifications,
@@ -28,7 +29,7 @@ from app.routers import (
     users,
     visualization,
     wallet,
-    webhooks,  # <-- ADD (placed after wallet for grouping)
+    webhooks,
 )
 
 settings = get_settings()
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix=api_prefix)
     app.include_router(sessions.router, prefix=api_prefix)
     app.include_router(chat.router, prefix=api_prefix)
+    app.include_router(events.router, prefix=api_prefix)
     app.include_router(visualization.router, prefix=api_prefix)
     app.include_router(cart.router, prefix=api_prefix)
     app.include_router(saved.router, prefix=api_prefix)
