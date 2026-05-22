@@ -13,6 +13,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import ProgrammingError
 
 revision: str = "0006"
 down_revision: Union[str, None] = "b5cfded5c7a2"
@@ -23,7 +24,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Use IF EXISTS for idempotency in case the ghost was never applied locally.
     for table in ("lead_items", "merchant_products", "leads", "merchants"):
-        op.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+        op.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
 
     # Best-effort restore of TIMESTAMP(timezone=True) the ghost stripped.
     # Wrapped to ignore failures (DB may already have correct types).
@@ -47,8 +48,8 @@ def upgrade() -> None:
                     existing_nullable=False,
                     existing_server_default=sa.text("now()"),
                 )
-            except Exception:
-                pass  # column may already be correct type
+            except ProgrammingError:
+                pass  # column already has TIMESTAMP(timezone=True)
 
     # Restore the indexes the ghost dropped, idempotently.
     op.execute(
