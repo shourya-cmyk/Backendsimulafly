@@ -157,3 +157,30 @@ async def test_impression_batch_records_all_impressions(auth_client, test_user, 
         select(func.count()).select_from(BuyerEvent).where(BuyerEvent.event_type == "impression")
     )
     assert res.scalar_one() == 2
+
+
+@pytest.mark.asyncio
+async def test_consumer_products_search_returns_merchant_products(auth_client, test_user, db_session):
+    """The consumer /products/ endpoint now reads from merchant_products."""
+    _, p = await _seed_merchant_with_funded_wallet_and_product(db_session, test_user, "CONS-1")
+    p.status = "published"
+    await db_session.commit()
+
+    r = await auth_client.get("/api/v1/products/")
+    assert r.status_code == 200
+    body = r.json()
+    skus = {item["sku"] for item in body}
+    assert "CONS-1" in skus
+
+
+@pytest.mark.asyncio
+async def test_consumer_products_omits_drafts(auth_client, test_user, db_session):
+    """Drafts should NOT appear in the consumer feed."""
+    _, p = await _seed_merchant_with_funded_wallet_and_product(db_session, test_user, "DRAFT-1")
+    p.status = "draft"
+    await db_session.commit()
+
+    r = await auth_client.get("/api/v1/products/")
+    body = r.json()
+    skus = {item["sku"] for item in body}
+    assert "DRAFT-1" not in skus
