@@ -1,4 +1,11 @@
 from app.models.cart import CartItem
+from app.models.event import (
+    BuyerEvent,
+    LedgerEntry,
+    BuyerEventDedup,
+    EventType,
+    LedgerEntryType,
+)
 from app.models.merchant import Merchant, MerchantMember, MerchantStatus, MemberRole
 from app.models.merchant_product import (
     MerchantProduct,
@@ -41,6 +48,11 @@ __all__ = [
     "MerchantProductExternalLink",
     "ProductStatus",
     "ExternalLinkPlatform",
+    "BuyerEvent",
+    "LedgerEntry",
+    "BuyerEventDedup",
+    "EventType",
+    "LedgerEntryType",
     "Wallet",
     "Transaction",
     "PricingRule",

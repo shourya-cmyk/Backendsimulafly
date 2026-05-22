@@ -13,8 +13,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.types import Float
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -70,10 +70,8 @@ class MerchantProduct(Base):
     in_app_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     in_app_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Stored as a plain Float array for now; Phase 4 will migrate this to pgvector
-    # with an HNSW index. The model declares ARRAY so tests on Postgres work; SQLite
-    # falls back to TEXT (see conftest.py type-conversion).
-    embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
+    # Phase 4: pgvector with HNSW index (replaces Phase 2's ARRAY(Float) placeholder)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(3072), nullable=True)
 
     ai_relevance_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     health_score: Mapped[str] = mapped_column(String(16), nullable=False, default="good")
