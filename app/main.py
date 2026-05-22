@@ -54,7 +54,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         log.warning("style_seed_skipped", error=str(e))
 
+    # Phase 4: periodic pause-if-depleted sweep
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.services.billing import BillingService
+
+    async def _pause_sweep():
+        async with SessionLocal() as db:
+            svc = BillingService(db)
+            paused = await svc.pause_if_depleted_all()
+            if paused > 0:
+                log.info("pause_sweep_paused_merchants", count=paused)
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(_pause_sweep, "interval", minutes=5, id="pause_sweep")
+    scheduler.start()
+    app.state.scheduler = scheduler
+
     yield
+    scheduler.shutdown(wait=False)
     await engine.dispose()
     log.info("shutdown")
 
