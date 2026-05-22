@@ -49,9 +49,9 @@ async def db_engine():
             # Replace JSONB with SQLite JSON
             if isinstance(column.type, JSONB):
                 column.type = SQLiteJSON()
-            # Replace ARRAY with Text
+            # Replace ARRAY with SQLite JSON (handles Python list natively)
             elif isinstance(column.type, ARRAY):
-                column.type = Text()
+                column.type = SQLiteJSON()
             # Replace Vector with Text
             elif type(column.type).__name__ == 'Vector':
                 column.type = Text()
