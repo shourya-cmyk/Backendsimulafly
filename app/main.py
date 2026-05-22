@@ -17,6 +17,7 @@ from app.routers import (
     auth,
     cart,
     chat,
+    merchants,
     notifications,
     products,
     saved,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
 
     api_prefix = "/api/v1"
     app.include_router(auth.router, prefix=api_prefix)
+    app.include_router(merchants.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)
     app.include_router(sessions.router, prefix=api_prefix)
     app.include_router(chat.router, prefix=api_prefix)
