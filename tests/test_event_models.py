@@ -105,3 +105,46 @@ async def test_buyer_event_dedup_unique_constraint(db_session, test_user):
     with pytest.raises(Exception):
         await db_session.commit()
     await db_session.rollback()
+
+
+def test_click_event_in_validates_required_fields():
+    from app.schemas.event import ClickEventIn
+    from pydantic import ValidationError
+
+    valid = ClickEventIn(
+        product_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        session_id="sess_123",
+    )
+    assert valid.context == {}
+
+    with pytest.raises(ValidationError):
+        ClickEventIn(product_id="not-a-uuid", session_id="sess_123")
+
+
+def test_impression_batch_in_caps_size():
+    from app.schemas.event import ImpressionBatchIn
+    from pydantic import ValidationError
+
+    valid = ImpressionBatchIn(
+        session_id="sess",
+        product_ids=["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"] * 50,
+    )
+    assert len(valid.product_ids) == 50
+
+    with pytest.raises(ValidationError):
+        ImpressionBatchIn(session_id="sess", product_ids=["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"] * 101)
+
+
+def test_external_redirect_in_validates():
+    from app.schemas.event import ExternalRedirectIn
+    from pydantic import ValidationError
+
+    valid = ExternalRedirectIn(
+        product_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        link_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        session_id="sess",
+    )
+    assert valid.session_id == "sess"
+
+    with pytest.raises(ValidationError):
+        ExternalRedirectIn(product_id="x", link_id="y", session_id="z")
