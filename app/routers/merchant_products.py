@@ -217,3 +217,88 @@ async def publish_product(
     )
     product = (await db.execute(stmt)).scalar_one()
     return product
+
+
+from app.models.merchant_product import MerchantProductExternalLink
+from app.schemas.merchant_product import (
+    ExternalLinkCreate,
+    ExternalLinkOut,
+    ExternalLinkUpdate,
+)
+
+
+async def _product_owned(
+    db: DBSession, product_id: uuid.UUID, merchant_id: uuid.UUID
+) -> MerchantProduct:
+    """Fetch a product or raise 404 if missing / owned by another merchant."""
+    p = await db.get(MerchantProduct, product_id)
+    if not p or p.merchant_id != merchant_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
+    return p
+
+
+@router.post(
+    "/{product_id}/external-links/",
+    response_model=ExternalLinkOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_external_link(
+    product_id: uuid.UUID,
+    body: ExternalLinkCreate,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> MerchantProductExternalLink:
+    await _product_owned(db, product_id, ctx.merchant.id)
+
+    link = MerchantProductExternalLink(
+        merchant_product_id=product_id,
+        **body.model_dump(mode="json"),
+    )
+    db.add(link)
+    await db.commit()
+    await db.refresh(link)
+    return link
+
+
+@router.patch(
+    "/{product_id}/external-links/{link_id}",
+    response_model=ExternalLinkOut,
+)
+async def update_external_link(
+    product_id: uuid.UUID,
+    link_id: uuid.UUID,
+    body: ExternalLinkUpdate,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> MerchantProductExternalLink:
+    await _product_owned(db, product_id, ctx.merchant.id)
+
+    link = await db.get(MerchantProductExternalLink, link_id)
+    if not link or link.merchant_product_id != product_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="link not found")
+
+    data = body.model_dump(exclude_unset=True, mode="json")
+    for k, v in data.items():
+        setattr(link, k, v)
+    await db.commit()
+    await db.refresh(link)
+    return link
+
+
+@router.delete(
+    "/{product_id}/external-links/{link_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_external_link(
+    product_id: uuid.UUID,
+    link_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> None:
+    await _product_owned(db, product_id, ctx.merchant.id)
+
+    link = await db.get(MerchantProductExternalLink, link_id)
+    if not link or link.merchant_product_id != product_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="link not found")
+    await db.delete(link)
+    await db.commit()

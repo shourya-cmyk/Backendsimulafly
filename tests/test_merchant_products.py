@@ -376,3 +376,126 @@ async def test_publish_archived_product_returns_400(auth_client):
         headers={"X-Merchant-Id": mid},
     )
     assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_add_external_link_to_product(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "External Links", "display_name": "External"}
+    )
+    mid = r.json()["id"]
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "EL-1", "title": "Has Links"},
+    )
+    pid = r.json()["id"]
+
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/external-links/",
+        headers={"X-Merchant-Id": mid},
+        json={
+            "platform": "amazon",
+            "url": "https://amazon.in/dp/B0XXX",
+            "label": "Buy on Amazon",
+            "is_primary": True,
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["platform"] == "amazon"
+    assert body["is_primary"] is True
+
+    # Verify it shows up on the product
+    r = await auth_client.get(
+        f"/api/v1/merchant/products/{pid}", headers={"X-Merchant-Id": mid}
+    )
+    assert len(r.json()["external_links"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_external_link(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Update Links", "display_name": "Update"}
+    )
+    mid = r.json()["id"]
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "UL-1", "title": "Product One"},
+    )
+    pid = r.json()["id"]
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/external-links/",
+        headers={"X-Merchant-Id": mid},
+        json={"platform": "amazon", "url": "https://amazon.in/dp/B1"},
+    )
+    lid = r.json()["id"]
+
+    r = await auth_client.patch(
+        f"/api/v1/merchant/products/{pid}/external-links/{lid}",
+        headers={"X-Merchant-Id": mid},
+        json={"label": "Updated Label", "last_seen_price": 1499.99},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["label"] == "Updated Label"
+    assert body["last_seen_price"] == 1499.99
+
+
+@pytest.mark.asyncio
+async def test_delete_external_link(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Delete Links", "display_name": "Delete"}
+    )
+    mid = r.json()["id"]
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "DL-1", "title": "Product One"},
+    )
+    pid = r.json()["id"]
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/external-links/",
+        headers={"X-Merchant-Id": mid},
+        json={"platform": "amazon", "url": "https://amazon.in/dp/B2"},
+    )
+    lid = r.json()["id"]
+
+    r = await auth_client.delete(
+        f"/api/v1/merchant/products/{pid}/external-links/{lid}",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 204
+
+    r = await auth_client.get(
+        f"/api/v1/merchant/products/{pid}", headers={"X-Merchant-Id": mid}
+    )
+    assert len(r.json()["external_links"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_external_link_cross_merchant_404(auth_client):
+    rA = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Alpha Org", "display_name": "Alpha"}
+    )
+    mA = rA.json()["id"]
+    rB = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Beta Org", "display_name": "Beta"}
+    )
+    mB = rB.json()["id"]
+
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mA},
+        json={"sku": "OWNED-A", "title": "Product P"},
+    )
+    pid = r.json()["id"]
+
+    # Try to add a link to mA's product while signed in to mB
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/external-links/",
+        headers={"X-Merchant-Id": mB},
+        json={"platform": "amazon", "url": "https://amazon.in/dp/X"},
+    )
+    assert r.status_code == 404
