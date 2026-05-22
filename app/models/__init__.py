@@ -1,4 +1,5 @@
 from app.models.cart import CartItem
+from app.models.merchant import Merchant, MerchantMember, MerchantStatus, MemberRole
 from app.models.message import Message
 from app.models.notification import Notification
 from app.models.product import Product
@@ -18,4 +19,8 @@ __all__ = [
     "SavedItem",
     "Notification",
     "Style",
+    "Merchant",
+    "MerchantMember",
+    "MerchantStatus",
+    "MemberRole",
 ]

@@ -38,14 +38,21 @@ def event_loop():
 @pytest_asyncio.fixture
 async def db_engine():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    # SQLite doesn't support Vector — drop that column type for tests.
+    # SQLite doesn't support Vector or JSONB — convert those column types for tests.
     from sqlalchemy import Text
-    from app.models import product as product_module
-    if hasattr(product_module.Product.__table__.c, "embedding"):
-        try:
-            product_module.Product.__table__.c.embedding.type = Text()
-        except Exception:
-            pass
+    from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    # Iterate through all tables in Base.metadata and replace JSONB/Vector types
+    for table in Base.metadata.tables.values():
+        for column in table.columns:
+            # Replace JSONB with SQLite JSON
+            if isinstance(column.type, JSONB):
+                column.type = SQLiteJSON()
+            # Replace Vector with Text
+            elif type(column.type).__name__ == 'Vector':
+                column.type = Text()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
