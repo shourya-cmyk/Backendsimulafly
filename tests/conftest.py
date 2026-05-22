@@ -38,17 +38,20 @@ def event_loop():
 @pytest_asyncio.fixture
 async def db_engine():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    # SQLite doesn't support Vector or JSONB — convert those column types for tests.
+    # SQLite doesn't support Vector, ARRAY, or JSONB — convert those column types for tests.
     from sqlalchemy import Text
     from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
-    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 
-    # Iterate through all tables in Base.metadata and replace JSONB/Vector types
+    # Iterate through all tables in Base.metadata and replace JSONB/Vector/ARRAY types
     for table in Base.metadata.tables.values():
         for column in table.columns:
             # Replace JSONB with SQLite JSON
             if isinstance(column.type, JSONB):
                 column.type = SQLiteJSON()
+            # Replace ARRAY with Text
+            elif isinstance(column.type, ARRAY):
+                column.type = Text()
             # Replace Vector with Text
             elif type(column.type).__name__ == 'Vector':
                 column.type = Text()

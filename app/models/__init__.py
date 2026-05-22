@@ -1,5 +1,11 @@
 from app.models.cart import CartItem
 from app.models.merchant import Merchant, MerchantMember, MerchantStatus, MemberRole
+from app.models.merchant_product import (
+    MerchantProduct,
+    MerchantProductExternalLink,
+    ProductStatus,
+    ExternalLinkPlatform,
+)
 from app.models.message import Message
 from app.models.notification import Notification
 from app.models.product import Product
@@ -23,4 +29,8 @@ __all__ = [
     "MerchantMember",
     "MerchantStatus",
     "MemberRole",
+    "MerchantProduct",
+    "MerchantProductExternalLink",
+    "ProductStatus",
+    "ExternalLinkPlatform",
 ]
