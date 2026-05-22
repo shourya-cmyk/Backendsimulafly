@@ -139,3 +139,26 @@ def test_wallet_settings_update_threshold_only():
 
     with pytest.raises(ValidationError):
         WalletSettingsUpdate(low_balance_threshold=-100)
+
+
+@pytest.mark.asyncio
+async def test_create_merchant_also_creates_wallet(auth_client, db_session):
+    import uuid as _uuid
+    from sqlalchemy import select
+    from app.models.wallet import Wallet
+
+    r = await auth_client.post(
+        "/api/v1/merchants/",
+        json={"legal_name": "Auto Wallet Co", "display_name": "Auto Wallet"},
+    )
+    assert r.status_code == 201
+    mid = _uuid.UUID(r.json()["id"])
+
+    res = await db_session.execute(
+        select(Wallet).where(Wallet.merchant_id == mid)
+    )
+    wallet = res.scalar_one_or_none()
+    assert wallet is not None
+    assert wallet.currency == "INR"
+    assert float(wallet.balance) == 0.0
+    assert wallet.status == "active"

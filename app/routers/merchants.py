@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.models.merchant import Merchant, MerchantMember, MemberRole
+from app.models.wallet import Wallet
 from app.models.user import User
 from app.schemas.merchant import (
     MemberInvite,
@@ -78,6 +79,11 @@ async def create_merchant(
         merchant_id=merchant.id, user_id=user.id, role=MemberRole.OWNER.value
     )
     db.add(membership)
+
+    # Phase 3: auto-create wallet for new merchant
+    wallet = Wallet(merchant_id=merchant.id)
+    db.add(wallet)
+
     await db.commit()
     await db.refresh(merchant)
     return merchant
