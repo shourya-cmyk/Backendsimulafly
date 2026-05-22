@@ -332,11 +332,22 @@ async def test_archive_product_soft_deletes(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_publish_product_transitions_status(auth_client):
+async def test_publish_product_transitions_status(auth_client, db_session):
+    from sqlalchemy import select
+    from decimal import Decimal
+    import uuid as uuid_mod
+    from app.models.wallet import Wallet
+
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Publish Test", "display_name": "Publish Test"}
     )
     mid = r.json()["id"]
+
+    # Fund wallet so publish passes the new wallet check
+    res = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid)))
+    wallet = res.scalar_one()
+    wallet.balance = Decimal("1000")
+    await db_session.commit()
 
     r = await auth_client.post(
         "/api/v1/merchant/products/",

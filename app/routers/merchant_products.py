@@ -205,8 +205,17 @@ async def publish_product(
             detail="archived products cannot be published; create a new one",
         )
 
+    # Phase 3: enforce wallet balance ≥ threshold before publishing
+    from app.models.wallet import Wallet
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == ctx.merchant.id))
+    wallet = res.scalar_one_or_none()
+    if not wallet or wallet.balance < wallet.low_balance_threshold:
+        raise HTTPException(
+            status_code=402,
+            detail="wallet balance below threshold; top up before publishing",
+        )
+
     product.status = "published"
-    # NOTE: Phase 3 will add a wallet-balance check here.
     await db.commit()
 
     # Re-fetch for serialization

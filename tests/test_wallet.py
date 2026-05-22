@@ -390,3 +390,44 @@ async def test_topup_confirm_bad_signature_returns_400(auth_client, db_session):
         )
 
     assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, db_session):
+    from sqlalchemy import select
+    from decimal import Decimal
+    import uuid as uuid_mod
+    from app.models.wallet import Wallet
+
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Publish Gate", "display_name": "PG"}
+    )
+    mid = r.json()["id"]
+
+    # Wallet starts at 0 (below default threshold of 500)
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "GATE-1", "title": "Gated Product"},
+    )
+    pid = r.json()["id"]
+
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/publish",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 402  # Payment Required
+    assert "wallet" in r.json()["detail"].lower()
+
+    # Top up the wallet manually and try again
+    res = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid)))
+    wallet = res.scalar_one()
+    wallet.balance = Decimal("600")
+    await db_session.commit()
+
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/publish",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "published"
