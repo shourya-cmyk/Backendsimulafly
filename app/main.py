@@ -27,6 +27,7 @@ from app.routers import (
     upload,
     users,
     visualization,
+    wallet,
 )
 
 settings = get_settings()
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix=api_prefix)
     app.include_router(merchants.router, prefix=api_prefix)
     app.include_router(merchant_products.router, prefix=api_prefix)
+    app.include_router(wallet.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)
     app.include_router(sessions.router, prefix=api_prefix)
     app.include_router(chat.router, prefix=api_prefix)

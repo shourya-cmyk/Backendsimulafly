@@ -162,3 +162,70 @@ async def test_create_merchant_also_creates_wallet(auth_client, db_session):
     assert wallet.currency == "INR"
     assert float(wallet.balance) == 0.0
     assert wallet.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_get_wallet_returns_zero_balance_for_new_merchant(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Wallet Read", "display_name": "WR"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.get(
+        "/api/v1/merchant/wallet/", headers={"X-Merchant-Id": mid}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["currency"] == "INR"
+    assert body["balance"] == 0.0
+    assert body["status"] == "active"
+    assert body["low_balance_threshold"] == 500.0
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_returns_paginated_results(auth_client, db_session):
+    from decimal import Decimal
+    from app.models.wallet import Transaction
+    import uuid as uuid_mod
+
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Txn List", "display_name": "TL"}
+    )
+    mid = r.json()["id"]
+
+    for i in range(5):
+        db_session.add(
+            Transaction(
+                merchant_id=uuid_mod.UUID(mid),
+                amount=Decimal(str(100 * (i + 1))),
+                status="successful" if i % 2 == 0 else "failed",
+                gateway_ref=f"pay_{i:04d}",
+                razorpay_order_id=f"order_{i:04d}",
+            )
+        )
+    await db_session.commit()
+
+    r = await auth_client.get(
+        "/api/v1/merchant/wallet/transactions",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 5
+    assert len(body["items"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_patch_wallet_settings_updates_threshold(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Threshold Test", "display_name": "TT"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.patch(
+        "/api/v1/merchant/wallet/settings",
+        headers={"X-Merchant-Id": mid},
+        json={"low_balance_threshold": 2500},
+    )
+    assert r.status_code == 200
+    assert r.json()["low_balance_threshold"] == 2500.0
