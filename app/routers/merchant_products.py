@@ -10,6 +10,7 @@ from app.models.merchant_product import MerchantProduct
 from app.schemas.merchant_product import (
     MerchantProductCreate,
     MerchantProductOut,
+    MerchantProductUpdate,
 )
 from app.utils.dependencies import DBSession
 from app.utils.merchant_context import CurrentMerchantContext
@@ -113,4 +114,106 @@ async def get_product(
     product = (await db.execute(stmt)).scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
+    return product
+
+
+def _embedding_fields_changed(body: MerchantProductUpdate, current: MerchantProduct) -> bool:
+    data = body.model_dump(exclude_unset=True)
+    for key in ("title", "description", "category"):
+        if key in data and data[key] != getattr(current, key):
+            return True
+    return False
+
+
+@router.patch("/{product_id}", response_model=MerchantProductOut)
+async def update_product(
+    product_id: uuid.UUID,
+    body: MerchantProductUpdate,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+    background_tasks: BackgroundTasks,
+) -> MerchantProduct:
+    stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.external_links))
+        .where(
+            MerchantProduct.id == product_id,
+            MerchantProduct.merchant_id == ctx.merchant.id,
+        )
+    )
+    product = (await db.execute(stmt)).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
+
+    needs_embedding_regen = _embedding_fields_changed(body, product)
+
+    data = body.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(product, k, v)
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="conflict (duplicate SKU?)")
+
+    # Re-fetch with eager-loaded external_links to avoid MissingGreenlet on serialization.
+    stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.external_links))
+        .where(MerchantProduct.id == product_id)
+    )
+    product = (await db.execute(stmt)).scalar_one()
+
+    if needs_embedding_regen:
+        from app.services.embedding import regenerate_embedding
+        background_tasks.add_task(regenerate_embedding, db, product.id)
+
+    return product
+
+
+@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_product(
+    product_id: uuid.UUID, db: DBSession, ctx: CurrentMerchantContext
+) -> None:
+    product = await db.get(MerchantProduct, product_id)
+    if not product or product.merchant_id != ctx.merchant.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
+    product.status = "archived"
+    await db.commit()
+
+
+@router.post("/{product_id}/publish", response_model=MerchantProductOut)
+async def publish_product(
+    product_id: uuid.UUID, db: DBSession, ctx: CurrentMerchantContext
+) -> MerchantProduct:
+    stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.external_links))
+        .where(
+            MerchantProduct.id == product_id,
+            MerchantProduct.merchant_id == ctx.merchant.id,
+        )
+    )
+    product = (await db.execute(stmt)).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
+
+    if product.status == "archived":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="archived products cannot be published; create a new one",
+        )
+
+    product.status = "published"
+    # NOTE: Phase 3 will add a wallet-balance check here.
+    await db.commit()
+
+    # Re-fetch for serialization
+    stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.external_links))
+        .where(MerchantProduct.id == product_id)
+    )
+    product = (await db.execute(stmt)).scalar_one()
     return product

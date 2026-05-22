@@ -275,3 +275,104 @@ async def test_get_product_404_for_other_merchants_product(auth_client, db_sessi
         headers={"X-Merchant-Id": mB},
     )
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_product_changes_fields_and_triggers_embedding(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Update Test", "display_name": "Update Test"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "U-1", "title": "Original Title"},
+    )
+    pid = r.json()["id"]
+
+    r = await auth_client.patch(
+        f"/api/v1/merchant/products/{pid}",
+        headers={"X-Merchant-Id": mid},
+        json={"title": "New Title", "in_app_price": 1500, "dimensions": {"w": 100, "h": 50}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["title"] == "New Title"
+    assert body["in_app_price"] == 1500
+    assert body["dimensions"] == {"w": 100, "h": 50}
+
+
+@pytest.mark.asyncio
+async def test_archive_product_soft_deletes(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Archive Test", "display_name": "Archive Test"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "A-1", "title": "To Archive"},
+    )
+    pid = r.json()["id"]
+
+    r = await auth_client.delete(
+        f"/api/v1/merchant/products/{pid}",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 204
+
+    # Product still exists with archived status
+    r = await auth_client.get(
+        f"/api/v1/merchant/products/{pid}", headers={"X-Merchant-Id": mid}
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_publish_product_transitions_status(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Publish Test", "display_name": "Publish Test"}
+    )
+    mid = r.json()["id"]
+
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "P-1", "title": "To Publish"},
+    )
+    pid = r.json()["id"]
+    assert r.json()["status"] == "draft"
+
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/publish",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_publish_archived_product_returns_400(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Archived Test", "display_name": "Archived Test"}
+    )
+    mid = r.json()["id"]
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "ARC-1", "title": "Once Archived"},
+    )
+    pid = r.json()["id"]
+    await auth_client.delete(
+        f"/api/v1/merchant/products/{pid}",
+        headers={"X-Merchant-Id": mid},
+    )
+
+    r = await auth_client.post(
+        f"/api/v1/merchant/products/{pid}/publish",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 400
