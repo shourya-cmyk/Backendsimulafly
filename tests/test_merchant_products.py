@@ -87,3 +87,47 @@ async def test_external_link_attached_to_product(db_session, test_user):
     assert link.platform == "amazon"
     assert link.is_primary is True
     assert link.position == 0
+
+
+def test_merchant_product_create_validates_required_fields():
+    from app.schemas.merchant_product import MerchantProductCreate
+    from pydantic import ValidationError
+
+    valid = MerchantProductCreate(sku="A1", title="Oak Table")
+    assert valid.status == "draft"  # default
+    assert valid.has_simulafly_listing is False
+
+    with pytest.raises(ValidationError):
+        MerchantProductCreate(sku="A1")  # missing title
+
+    with pytest.raises(ValidationError):
+        MerchantProductCreate(title="Just Title")  # missing sku
+
+
+def test_external_link_create_validates_platform_and_url():
+    from app.schemas.merchant_product import ExternalLinkCreate
+    from pydantic import ValidationError
+
+    valid = ExternalLinkCreate(platform="amazon", url="https://amazon.in/dp/B0XX")
+    assert valid.is_primary is False
+    assert valid.position == 0
+
+    with pytest.raises(ValidationError):
+        ExternalLinkCreate(platform="not-a-platform", url="https://x.com")
+
+    with pytest.raises(ValidationError):
+        ExternalLinkCreate(platform="amazon", url="not-a-url")
+
+
+def test_merchant_product_update_is_all_optional():
+    from app.schemas.merchant_product import MerchantProductUpdate
+
+    # All-empty update is valid; just means no changes.
+    u = MerchantProductUpdate()
+    assert u.title is None
+    assert u.dimensions is None
+
+    # Partial update is valid.
+    u2 = MerchantProductUpdate(title="New Title", in_app_price=9999.99)
+    assert u2.title == "New Title"
+    assert u2.in_app_price == 9999.99
