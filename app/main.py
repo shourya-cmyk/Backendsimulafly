@@ -14,6 +14,7 @@ from app.core.database import SessionLocal, engine, ping_db
 from app.core.logging import configure_logging, get_logger
 from app.core.rate_limit import limiter
 from app.routers import (
+    analytics,
     auth,
     cart,
     chat,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.MAX_REQUEST_BYTES)
 
     api_prefix = "/api/v1"
+    app.include_router(analytics.router, prefix=api_prefix)
     app.include_router(auth.router, prefix=api_prefix)
     app.include_router(merchants.router, prefix=api_prefix)
     app.include_router(merchant_products.router, prefix=api_prefix)
