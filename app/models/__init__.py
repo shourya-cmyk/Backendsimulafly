@@ -14,6 +14,14 @@ from app.models.saved_item import SavedItem
 from app.models.session import DesignSession
 from app.models.style import Style
 from app.models.user import User
+from app.models.wallet import (
+    Wallet,
+    Transaction,
+    PricingRule,
+    WalletStatus,
+    TransactionStatus,
+    RateType,
+)
 
 __all__ = [
     "User",
@@ -33,4 +41,10 @@ __all__ = [
     "MerchantProductExternalLink",
     "ProductStatus",
     "ExternalLinkPlatform",
+    "Wallet",
+    "Transaction",
+    "PricingRule",
+    "WalletStatus",
+    "TransactionStatus",
+    "RateType",
 ]
