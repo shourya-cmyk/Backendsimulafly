@@ -131,3 +131,147 @@ def test_merchant_product_update_is_all_optional():
     u2 = MerchantProductUpdate(title="New Title", in_app_price=9999.99)
     assert u2.title == "New Title"
     assert u2.in_app_price == 9999.99
+
+
+@pytest.mark.asyncio
+async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_user, db_session):
+    # Create a merchant first
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Prod Test", "display_name": "PT"}
+    )
+    assert r.status_code == 201
+    mid = r.json()["id"]
+
+    # Create a product
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "OAK-1", "title": "Oak Dining Table", "category": "Furniture"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["sku"] == "OAK-1"
+    assert body["title"] == "Oak Dining Table"
+    assert body["status"] == "draft"
+    assert body["merchant_id"] == mid
+
+
+@pytest.mark.asyncio
+async def test_create_product_duplicate_sku_returns_409(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Dup", "display_name": "Dup"}
+    )
+    mid = r.json()["id"]
+
+    r1 = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "SAME", "title": "First"},
+    )
+    assert r1.status_code == 201
+
+    r2 = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "SAME", "title": "Second"},
+    )
+    assert r2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_list_products_returns_only_this_merchants_products(auth_client, db_session):
+    # Create two merchants, two products each
+    r1 = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "M1", "display_name": "M1"}
+    )
+    m1 = r1.json()["id"]
+    r2 = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "M2", "display_name": "M2"}
+    )
+    m2 = r2.json()["id"]
+
+    for sku in ("M1-1", "M1-2"):
+        await auth_client.post(
+            "/api/v1/merchant/products/",
+            headers={"X-Merchant-Id": m1},
+            json={"sku": sku, "title": f"P {sku}"},
+        )
+    for sku in ("M2-1", "M2-2", "M2-3"):
+        await auth_client.post(
+            "/api/v1/merchant/products/",
+            headers={"X-Merchant-Id": m2},
+            json={"sku": sku, "title": f"P {sku}"},
+        )
+
+    r = await auth_client.get(
+        "/api/v1/merchant/products/", headers={"X-Merchant-Id": m1}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 2
+    skus = sorted(p["sku"] for p in body["items"])
+    assert skus == ["M1-1", "M1-2"]
+
+
+@pytest.mark.asyncio
+async def test_list_products_filters_by_status_and_search(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Filt", "display_name": "Filt"}
+    )
+    mid = r.json()["id"]
+
+    # Create 3 products: 2 draft, 1 published
+    for sku, title, status in [
+        ("DRAFT-A", "Velvet Sofa", "draft"),
+        ("DRAFT-B", "Oak Table", "draft"),
+        ("PUB-1", "Brass Lamp", "published"),
+    ]:
+        await auth_client.post(
+            "/api/v1/merchant/products/",
+            headers={"X-Merchant-Id": mid},
+            json={"sku": sku, "title": title, "status": status},
+        )
+
+    r = await auth_client.get(
+        "/api/v1/merchant/products/?status=draft",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    assert all(p["status"] == "draft" for p in r.json()["items"])
+    assert len(r.json()["items"]) == 2
+
+    # Search
+    r = await auth_client.get(
+        "/api/v1/merchant/products/?search=lamp",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["sku"] == "PUB-1"
+
+
+@pytest.mark.asyncio
+async def test_get_product_404_for_other_merchants_product(auth_client, db_session):
+    r1 = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Merchant Alpha", "display_name": "Alpha"}
+    )
+    mA = r1.json()["id"]
+    r2 = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Merchant Beta", "display_name": "Beta"}
+    )
+    mB = r2.json()["id"]
+
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mA},
+        json={"sku": "OWNED-BY-A", "title": "A's product"},
+    )
+    pid = r.json()["id"]
+
+    # Try to read product mA's product while signed in to mB
+    r = await auth_client.get(
+        f"/api/v1/merchant/products/{pid}",
+        headers={"X-Merchant-Id": mB},
+    )
+    assert r.status_code == 404
