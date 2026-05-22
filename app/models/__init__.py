@@ -1,4 +1,5 @@
 from app.models.cart import CartItem
+from app.models.lead import BuyerLead, Order, LeadType, LeadStatus, OrderStatus
 from app.models.event import (
     BuyerEvent,
     LedgerEntry,
@@ -31,6 +32,11 @@ from app.models.wallet import (
 )
 
 __all__ = [
+    "BuyerLead",
+    "Order",
+    "LeadType",
+    "LeadStatus",
+    "OrderStatus",
     "User",
     "DesignSession",
     "Message",

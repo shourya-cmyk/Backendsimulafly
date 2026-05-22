@@ -16,9 +16,11 @@ from app.core.rate_limit import limiter
 from app.routers import (
     analytics,
     auth,
+    buyer_leads,
     cart,
     chat,
     events,
+    leads,
     merchant_products,
     merchants,
     notifications,
@@ -102,6 +104,8 @@ def create_app() -> FastAPI:
 
     api_prefix = "/api/v1"
     app.include_router(analytics.router, prefix=api_prefix)
+    app.include_router(leads.router, prefix=api_prefix)
+    app.include_router(buyer_leads.router, prefix=api_prefix)
     app.include_router(auth.router, prefix=api_prefix)
     app.include_router(merchants.router, prefix=api_prefix)
     app.include_router(merchant_products.router, prefix=api_prefix)

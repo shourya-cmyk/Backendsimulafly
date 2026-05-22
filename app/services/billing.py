@@ -140,6 +140,29 @@ class BillingService:
         self.db.add(ledger)
         await self.db.flush()
 
+    async def transaction_fee_on_conversion(self, *, order: "Order") -> None:
+        """Deduct the simulafly_purchase fee (% of order total) when an order completes."""
+        from app.models.lead import Order  # local import avoids circular deps
+
+        rate, rate_type = await resolve_rate(
+            self.db, "simulafly_purchase", order.merchant_id
+        )
+        if rate <= 0:
+            return
+
+        from decimal import Decimal as _D
+        amount = (
+            _D(str(order.total_estimated)) * rate / _D("100")
+            if rate_type == "percentage"
+            else rate
+        )
+        await self._deduct(
+            merchant_id=order.merchant_id,
+            amount=amount,
+            reason="simulafly_purchase",
+        )
+        # Note: caller (leads router) calls db.commit() after this
+
     async def pause_if_depleted_for(self, merchant_id: uuid.UUID) -> None:
         """Eventual pause check (called from BackgroundTasks after each deduction)."""
         res = await self.db.execute(select(Wallet).where(Wallet.merchant_id == merchant_id))
