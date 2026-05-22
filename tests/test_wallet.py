@@ -95,3 +95,47 @@ def test_pricing_rule_enums():
     assert RateType.PERCENTAGE.value == "percentage"
     pr = PricingRule(event_type="click", rate=Decimal("0.25"), rate_type="fixed")
     assert pr.rate_type == "fixed"
+
+
+def test_topup_intent_request_validates_amount():
+    from app.schemas.wallet import TopupIntentRequest
+    from pydantic import ValidationError
+
+    valid = TopupIntentRequest(amount=1000)
+    assert valid.currency == "INR"
+
+    with pytest.raises(ValidationError):
+        TopupIntentRequest(amount=0)
+    with pytest.raises(ValidationError):
+        TopupIntentRequest(amount=-50)
+    with pytest.raises(ValidationError):
+        TopupIntentRequest(amount=10_000_000)
+
+
+def test_topup_confirm_request_requires_all_fields():
+    from app.schemas.wallet import TopupConfirmRequest
+    from pydantic import ValidationError
+
+    valid = TopupConfirmRequest(
+        order_id="order_AB",
+        payment_id="pay_XY",
+        signature="abc123",
+    )
+    assert valid.order_id == "order_AB"
+
+    with pytest.raises(ValidationError):
+        TopupConfirmRequest(order_id="x", payment_id="y")
+
+
+def test_wallet_settings_update_threshold_only():
+    from app.schemas.wallet import WalletSettingsUpdate
+    from pydantic import ValidationError
+
+    valid = WalletSettingsUpdate(low_balance_threshold=2500)
+    assert valid.low_balance_threshold == 2500
+
+    empty = WalletSettingsUpdate()
+    assert empty.low_balance_threshold is None
+
+    with pytest.raises(ValidationError):
+        WalletSettingsUpdate(low_balance_threshold=-100)
