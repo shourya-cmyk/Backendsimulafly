@@ -47,3 +47,31 @@ async def test_merchant_member_unique_per_merchant_user_pair(db_session, test_us
     with pytest.raises(Exception):  # IntegrityError from UNIQUE constraint
         await db_session.commit()
     await db_session.rollback()
+
+
+def test_merchant_create_validates_required_fields():
+    from app.schemas.merchant import MerchantCreate
+    from pydantic import ValidationError
+
+    # Valid input
+    valid = MerchantCreate(legal_name="Acme Furniture Co.", display_name="Acme")
+    assert valid.country == "IN"  # default
+    assert valid.support_email is None
+
+    # Missing required field
+    with pytest.raises(ValidationError):
+        MerchantCreate(legal_name="Acme")  # missing display_name
+
+
+def test_merchant_member_invite_validates_email_and_role():
+    from app.schemas.merchant import MemberInvite
+    from pydantic import ValidationError
+
+    valid = MemberInvite(email="sarah@acme.com", role="admin")
+    assert valid.role == "admin"
+
+    with pytest.raises(ValidationError):
+        MemberInvite(email="not-an-email", role="admin")
+
+    with pytest.raises(ValidationError):
+        MemberInvite(email="ok@acme.com", role="not-a-role")
