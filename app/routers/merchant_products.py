@@ -55,7 +55,7 @@ async def list_products(
     total = total_res.scalar_one()
 
     base = (
-        base.options(selectinload(MerchantProduct.external_links))
+        base.options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .order_by(MerchantProduct.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -228,11 +228,14 @@ async def publish_product(
     return product
 
 
-from app.models.merchant_product import MerchantProductExternalLink
+from app.models.merchant_product import MerchantProductExternalLink, MerchantProductVariant
 from app.schemas.merchant_product import (
     ExternalLinkCreate,
     ExternalLinkOut,
     ExternalLinkUpdate,
+    ProductVariantCreate,
+    ProductVariantOut,
+    ProductVariantUpdate,
 )
 
 
@@ -310,4 +313,78 @@ async def delete_external_link(
     if not link or link.merchant_product_id != product_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="link not found")
     await db.delete(link)
+    await db.commit()
+
+
+# ─────────────────────────── Variants ────────────────────────────────────────
+
+
+@router.get("/{product_id}/variants/", response_model=list[ProductVariantOut])
+async def list_variants(
+    product_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> list[MerchantProductVariant]:
+    await _product_owned(db, product_id, ctx.merchant.id)
+    res = await db.execute(
+        select(MerchantProductVariant)
+        .where(MerchantProductVariant.merchant_product_id == product_id)
+        .order_by(MerchantProductVariant.position)
+    )
+    return list(res.scalars().all())
+
+
+@router.post(
+    "/{product_id}/variants/",
+    response_model=ProductVariantOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_variant(
+    product_id: uuid.UUID,
+    body: ProductVariantCreate,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> MerchantProductVariant:
+    await _product_owned(db, product_id, ctx.merchant.id)
+    variant = MerchantProductVariant(
+        merchant_product_id=product_id,
+        **body.model_dump(),
+    )
+    db.add(variant)
+    await db.commit()
+    await db.refresh(variant)
+    return variant
+
+
+@router.patch("/{product_id}/variants/{variant_id}", response_model=ProductVariantOut)
+async def update_variant(
+    product_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    body: ProductVariantUpdate,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> MerchantProductVariant:
+    await _product_owned(db, product_id, ctx.merchant.id)
+    variant = await db.get(MerchantProductVariant, variant_id)
+    if not variant or variant.merchant_product_id != product_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(variant, k, v)
+    await db.commit()
+    await db.refresh(variant)
+    return variant
+
+
+@router.delete("/{product_id}/variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_variant(
+    product_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> None:
+    await _product_owned(db, product_id, ctx.merchant.id)
+    variant = await db.get(MerchantProductVariant, variant_id)
+    if not variant or variant.merchant_product_id != product_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
+    await db.delete(variant)
     await db.commit()

@@ -13,7 +13,7 @@ from app.core.rate_limit import limiter
 from app.models.message import Message
 from app.models.session import DesignSession
 from app.schemas.chat import ChatAnalyzeRequest, ChatRequest, ChatResponse, MessageOut
-from app.schemas.product import ProductOut
+from app.schemas.product import MerchantProductOut
 from app.services.azure_ai_client import get_image_client
 from app.services.image_service import persist_base64, persist_image
 from app.services.llm import get_chat_llm
@@ -315,7 +315,7 @@ async def chat(
     if result.products:
         ui_payload = {
             "type": "product_carousel",
-            "products": [ProductOut.model_validate(p).model_dump(mode="json") for p in result.products],
+            "products": [MerchantProductOut.model_validate(p).model_dump(mode="json") for p in result.products],
         }
     elif result.preview_product_ids:
         # Multi-product composite preview (different categories selected together)

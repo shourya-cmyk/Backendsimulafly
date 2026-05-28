@@ -208,6 +208,22 @@ async def visualize(
     # Fetch all requested products
     products_res = await db.execute(select(Product).where(Product.id.in_(product_ids)))
     products_by_id: dict[uuid.UUID, Product] = {p.id: p for p in products_res.scalars().all()}
+
+    # Fallback to MerchantProduct for any missing IDs
+    missing_ids = [pid for pid in product_ids if pid not in products_by_id]
+    if missing_ids:
+        from app.models.merchant_product import MerchantProduct as _MerchantProduct
+        mp_res = await db.execute(select(_MerchantProduct).where(_MerchantProduct.id.in_(missing_ids)))
+        for mp in mp_res.scalars().all():
+            class MockProduct:
+                def __init__(self, mp_obj):
+                    self.id = mp_obj.id
+                    self.title = mp_obj.title
+                    self.category = mp_obj.category
+                    self.image_url = mp_obj.primary_image_url
+                    self.product_metadata = mp_obj.custom_metadata or {}
+            products_by_id[mp.id] = MockProduct(mp)
+
     missing = [str(pid) for pid in product_ids if pid not in products_by_id]
     if missing:
         raise HTTPException(

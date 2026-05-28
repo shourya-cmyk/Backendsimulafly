@@ -14,6 +14,7 @@ from app.schemas.merchant import (
     MerchantOut,
     MerchantUpdate,
 )
+from app.schemas.merchant_product import MerchantProductOut
 from app.utils.dependencies import CurrentUser, DBSession
 from app.utils.merchant_context import (
     CurrentMerchantContext,
@@ -252,3 +253,62 @@ async def remove_member(
         raise HTTPException(status_code=404, detail="member not found")
     await db.delete(member)
     await db.commit()
+
+
+@router.get("/public/{lookup_value}", response_model=MerchantOut)
+async def get_public_merchant(
+    lookup_value: str,
+    db: DBSession,
+) -> Merchant:
+    """Fetch public merchant details by UUID, slug, or referral code."""
+    try:
+        merchant_id = uuid.UUID(lookup_value)
+        stmt = select(Merchant).where(Merchant.id == merchant_id)
+    except ValueError:
+        stmt = select(Merchant).where(
+            (Merchant.slug == lookup_value) | (Merchant.referral_code == lookup_value)
+        )
+    res = await db.execute(stmt)
+    merchant = res.scalar_one_or_none()
+    if not merchant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Merchant not found")
+    if merchant.status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Merchant account is suspended"
+        )
+    return merchant
+
+
+@router.get("/public/{lookup_value}/products", response_model=list[MerchantProductOut])
+async def get_public_merchant_products(
+    lookup_value: str,
+    db: DBSession,
+) -> list:
+    """Fetch published merchant products by merchant UUID, slug, or referral code."""
+    from sqlalchemy.orm import selectinload
+    from app.models.merchant_product import MerchantProduct
+
+    try:
+        merchant_id = uuid.UUID(lookup_value)
+        stmt = select(Merchant.id).where(Merchant.id == merchant_id)
+    except ValueError:
+        stmt = select(Merchant.id).where(
+            (Merchant.slug == lookup_value) | (Merchant.referral_code == lookup_value)
+        )
+    m_res = await db.execute(stmt)
+    m_id = m_res.scalar_one_or_none()
+    if not m_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Merchant not found")
+
+    p_stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .where(
+            MerchantProduct.merchant_id == m_id,
+            MerchantProduct.status == "published",
+        )
+        .order_by(MerchantProduct.created_at.desc())
+    )
+    res = await db.execute(p_stmt)
+    return list(res.scalars().all())
+

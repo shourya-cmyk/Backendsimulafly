@@ -88,6 +88,45 @@ class MerchantProduct(Base):
         cascade="all, delete-orphan",
         order_by="MerchantProductExternalLink.position",
     )
+    variants = relationship(
+        "MerchantProductVariant",
+        back_populates="merchant_product",
+        cascade="all, delete-orphan",
+        order_by="MerchantProductVariant.position",
+    )
+
+
+class MerchantProductVariant(Base):
+    """Colour / size / material variant of a MerchantProduct."""
+
+    __tablename__ = "merchant_product_variants"
+    __table_args__ = (
+        Index("ix_merchant_product_variants_product", "merchant_product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    merchant_product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("merchant_products.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sku_suffix: Mapped[str] = mapped_column(String(64), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    color: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    size: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    material: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # positive = premium, negative = discount vs parent in_app_price
+    price_modifier: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    in_app_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    primary_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    merchant_product = relationship("MerchantProduct", back_populates="variants")
 
 
 class MerchantProductExternalLink(Base):

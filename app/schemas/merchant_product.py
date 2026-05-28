@@ -40,6 +40,51 @@ class ExternalLinkOut(BaseModel):
     created_at: datetime
 
 
+class ProductVariantCreate(BaseModel):
+    sku_suffix: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=255)
+    color: str | None = Field(default=None, max_length=100)
+    size: str | None = Field(default=None, max_length=100)
+    material: str | None = Field(default=None, max_length=100)
+    price_modifier: float = Field(default=0)
+    in_app_stock: int | None = Field(default=None, ge=0)
+    primary_image_url: str | None = Field(default=None, max_length=2048)
+    is_default: bool = False
+    position: int = Field(default=0, ge=0)
+
+
+class ProductVariantUpdate(BaseModel):
+    sku_suffix: str | None = Field(default=None, min_length=1, max_length=64)
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    color: str | None = Field(default=None, max_length=100)
+    size: str | None = Field(default=None, max_length=100)
+    material: str | None = Field(default=None, max_length=100)
+    price_modifier: float | None = None
+    in_app_stock: int | None = Field(default=None, ge=0)
+    primary_image_url: str | None = Field(default=None, max_length=2048)
+    is_default: bool | None = None
+    position: int | None = Field(default=None, ge=0)
+
+
+class ProductVariantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    merchant_product_id: uuid.UUID
+    sku_suffix: str
+    label: str
+    color: str | None
+    size: str | None
+    material: str | None
+    price_modifier: float
+    in_app_stock: int | None
+    primary_image_url: str | None
+    is_default: bool
+    position: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class MerchantProductCreate(BaseModel):
     sku: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=500)
@@ -116,6 +161,7 @@ class MerchantProductOut(BaseModel):
     health_reason: str | None
 
     external_links: list[ExternalLinkOut] = []
+    variants: list[ProductVariantOut] = []
 
     created_at: datetime
     updated_at: datetime

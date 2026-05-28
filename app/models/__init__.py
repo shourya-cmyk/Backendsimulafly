@@ -1,3 +1,4 @@
+from app.models.buyer_intelligence import MerchantBuyerAccess, MerchantContact
 from app.models.cart import CartItem
 from app.models.lead import BuyerLead, Order, LeadType, LeadStatus, OrderStatus
 from app.models.event import (
@@ -11,6 +12,7 @@ from app.models.merchant import Merchant, MerchantMember, MerchantStatus, Member
 from app.models.merchant_product import (
     MerchantProduct,
     MerchantProductExternalLink,
+    MerchantProductVariant,
     ProductStatus,
     ExternalLinkPlatform,
 )
@@ -32,6 +34,8 @@ from app.models.wallet import (
 )
 
 __all__ = [
+    "MerchantBuyerAccess",
+    "MerchantContact",
     "BuyerLead",
     "Order",
     "LeadType",
@@ -52,6 +56,7 @@ __all__ = [
     "MemberRole",
     "MerchantProduct",
     "MerchantProductExternalLink",
+    "MerchantProductVariant",
     "ProductStatus",
     "ExternalLinkPlatform",
     "BuyerEvent",

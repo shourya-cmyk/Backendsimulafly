@@ -5,6 +5,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.models.merchant_product import MerchantProduct, MerchantProductExternalLink
 from app.schemas.event import (
     BuyerEventOut,
@@ -16,6 +18,7 @@ from app.schemas.event import (
 from app.services.billing import BillingService
 from app.utils.dependencies import CurrentUser, DBSession
 
+_settings = get_settings()
 router = APIRouter(prefix="/events", tags=["events"])
 
 
@@ -24,6 +27,7 @@ class _ImpressionBatchResponse(BaseModel):
 
 
 @router.post("/click", response_model=BuyerEventOut)
+@limiter.limit("30/minute")
 async def record_click(
     body: ClickEventIn,
     user: CurrentUser,
@@ -50,6 +54,7 @@ async def record_click(
 
 
 @router.post("/external-redirect", response_model=ExternalRedirectOut)
+@limiter.limit("10/minute")
 async def record_external_redirect(
     body: ExternalRedirectIn,
     user: CurrentUser,
@@ -83,6 +88,7 @@ async def record_external_redirect(
 
 
 @router.post("/impression-batch", response_model=_ImpressionBatchResponse)
+@limiter.limit("20/minute")
 async def record_impression_batch(
     body: ImpressionBatchIn,
     user: CurrentUser,
