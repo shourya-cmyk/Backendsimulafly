@@ -26,8 +26,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.models.merchant_product import MerchantProduct
 from app.models.message import Message
-from app.models.product import Product
 from app.services.llm import get_chat_llm, get_embeddings
 
 log = get_logger(__name__)
@@ -142,8 +142,8 @@ class RAGState(TypedDict, total=False):
     history: list[Message]
     shopping_intent: bool
     intents: list[IntentQuery]
-    candidates: list[Product]
-    products: list[Product]
+    candidates: list[MerchantProduct]
+    products: list[MerchantProduct]
     assistant_text: str
     preview_product_id: uuid.UUID | None      # single-product preview
     preview_product_ids: list[uuid.UUID] | None  # multi-product composite preview
@@ -151,7 +151,7 @@ class RAGState(TypedDict, total=False):
 
 @dataclass
 class RAGResult:
-    products: list[Product]
+    products: list[MerchantProduct]
     assistant_text: str
     preview_product_id: uuid.UUID | None
     preview_product_ids: list[uuid.UUID] | None
@@ -236,7 +236,7 @@ def _heuristic_shopping_intent(user_message: str) -> bool:
 async def _node_retrieve(state: RAGState) -> dict:
     db: AsyncSession = state["db"]
     embeddings = get_embeddings()
-    seen: dict[uuid.UUID, Product] = {}
+    seen: dict[uuid.UUID, MerchantProduct] = {}
     intents = state.get("intents", [])
     log.info(
         "rag.retrieve",
@@ -262,7 +262,7 @@ async def _node_rerank(state: RAGState) -> dict:
         return {"products": candidates}
     by_id = {str(p.id): p for p in candidates}
     catalog = "\n".join(
-        f"{p.id} | {p.title[:80]} | {p.category} | {p.price} | {p.rating}" for p in candidates
+        f"{p.id} | {p.title[:80]} | {p.category} | {p.in_app_price or 0}" for p in candidates
     )
     history_snippet = "\n".join(
         f"{m.role}: {m.content}" for m in state.get("history", [])[-4:]
@@ -278,7 +278,7 @@ async def _node_rerank(state: RAGState) -> dict:
             (
                 "human",
                 "Conversation:\n{history}\nuser: {user_message}\n\n"
-                "Candidates (id | title | category | price | rating):\n{catalog}",
+                "Candidates (id | title | category | price):\n{catalog}",
             ),
         ]
     )
@@ -313,7 +313,7 @@ async def _node_dedupe_categories(state: RAGState) -> dict:
 
     # Group by normalised category
     from collections import defaultdict
-    by_cat: dict[str, list[Product]] = defaultdict(list)
+    by_cat: dict[str, list[MerchantProduct]] = defaultdict(list)
     for p in products:
         cat = (p.category or "uncategorised").lower().strip()
         by_cat[cat].append(p)
@@ -347,7 +347,7 @@ async def _node_generate_reply(state: RAGState) -> dict:
     if shopping:
         product_brief = (
             "\n".join(
-                f"- {p.id} | {p.title[:80]} | {p.category} | \u20b9{p.price} | {p.rating}\u2605"
+                f"- {p.id} | {p.title[:80]} | {p.category} | \u20b9{p.in_app_price or 0}"
                 for p in products
             )
             or "(none retrieved)"
@@ -390,19 +390,19 @@ async def _vector_search(
     embedding: list[float],
     category: str | None,
     max_price: float | None,
-) -> list[Product]:
-    where_clauses = ["embedding IS NOT NULL"]
+) -> list[MerchantProduct]:
+    where_clauses = ["embedding IS NOT NULL", "status = 'published'"]
     params: dict[str, Any] = {"q": _vector_literal(embedding), "k": TOP_K}
     if category:
         where_clauses.append("LOWER(category) LIKE LOWER(:cat)")
         params["cat"] = f"%{category}%"
     if max_price:
-        where_clauses.append("price <= :maxp")
+        where_clauses.append("in_app_price <= :maxp")
         params["maxp"] = max_price
-    # halfvec cast matches the HNSW index built in product_ingestion so the planner
+    # halfvec cast matches the HNSW index built in Phase 4 migration so the planner
     # uses it. On plain vector (no halfvec support) Postgres falls back to a seq scan.
     sql = text(
-        f"""SELECT id FROM products WHERE {' AND '.join(where_clauses)}
+        f"""SELECT id FROM merchant_products WHERE {' AND '.join(where_clauses)}
             ORDER BY embedding::halfvec(3072) <=> CAST(:q AS halfvec(3072)) LIMIT :k"""
     )
     try:
@@ -413,7 +413,7 @@ async def _vector_search(
     ids = [row[0] for row in res.fetchall()]
     if not ids:
         return []
-    rows = await db.execute(select(Product).where(Product.id.in_(ids)))
+    rows = await db.execute(select(MerchantProduct).where(MerchantProduct.id.in_(ids)))
     by_id = {p.id: p for p in rows.scalars().all()}
     return [by_id[i] for i in ids if i in by_id]
 

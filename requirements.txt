@@ -8,6 +8,7 @@ aiosqlite==0.20.0
 alembic==1.14.0
 pgvector==0.3.6
 python-jose[cryptography]==3.3.0
+razorpay>=1.4.0,<2.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 python-multipart==0.0.19
@@ -27,3 +28,5 @@ pytest-cov==6.0.0
 factory-boy==3.3.1
 Pillow==11.1.0
 google-auth==2.35.0
+apscheduler>=3.10,<4.0
+setuptools<=80.10.2

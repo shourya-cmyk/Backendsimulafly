@@ -1,4 +1,21 @@
+from app.models.buyer_intelligence import MerchantBuyerAccess, MerchantContact
 from app.models.cart import CartItem
+from app.models.lead import BuyerLead, Order, LeadType, LeadStatus, OrderStatus
+from app.models.event import (
+    BuyerEvent,
+    LedgerEntry,
+    BuyerEventDedup,
+    EventType,
+    LedgerEntryType,
+)
+from app.models.merchant import Merchant, MerchantMember, MerchantStatus, MemberRole
+from app.models.merchant_product import (
+    MerchantProduct,
+    MerchantProductExternalLink,
+    MerchantProductVariant,
+    ProductStatus,
+    ExternalLinkPlatform,
+)
 from app.models.message import Message
 from app.models.notification import Notification
 from app.models.product import Product
@@ -7,8 +24,23 @@ from app.models.saved_item import SavedItem
 from app.models.session import DesignSession
 from app.models.style import Style
 from app.models.user import User
+from app.models.wallet import (
+    Wallet,
+    Transaction,
+    PricingRule,
+    WalletStatus,
+    TransactionStatus,
+    RateType,
+)
 
 __all__ = [
+    "MerchantBuyerAccess",
+    "MerchantContact",
+    "BuyerLead",
+    "Order",
+    "LeadType",
+    "LeadStatus",
+    "OrderStatus",
     "User",
     "DesignSession",
     "Message",
@@ -18,4 +50,24 @@ __all__ = [
     "SavedItem",
     "Notification",
     "Style",
+    "Merchant",
+    "MerchantMember",
+    "MerchantStatus",
+    "MemberRole",
+    "MerchantProduct",
+    "MerchantProductExternalLink",
+    "MerchantProductVariant",
+    "ProductStatus",
+    "ExternalLinkPlatform",
+    "BuyerEvent",
+    "LedgerEntry",
+    "BuyerEventDedup",
+    "EventType",
+    "LedgerEntryType",
+    "Wallet",
+    "Transaction",
+    "PricingRule",
+    "WalletStatus",
+    "TransactionStatus",
+    "RateType",
 ]

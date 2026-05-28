@@ -14,9 +14,17 @@ from app.core.database import SessionLocal, engine, ping_db
 from app.core.logging import configure_logging, get_logger
 from app.core.rate_limit import limiter
 from app.routers import (
+    analytics,
     auth,
+    buyer_intelligence,
+    buyer_leads,
     cart,
     chat,
+    contacts,
+    events,
+    leads,
+    merchant_products,
+    merchants,
     notifications,
     products,
     saved,
@@ -25,6 +33,8 @@ from app.routers import (
     upload,
     users,
     visualization,
+    wallet,
+    webhooks,
 )
 
 settings = get_settings()
@@ -48,7 +58,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         log.warning("style_seed_skipped", error=str(e))
 
+    # Phase 4: periodic pause-if-depleted sweep
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.services.billing import BillingService
+
+    async def _pause_sweep():
+        async with SessionLocal() as db:
+            svc = BillingService(db)
+            paused = await svc.pause_if_depleted_all()
+            if paused > 0:
+                log.info("pause_sweep_paused_merchants", count=paused)
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(_pause_sweep, "interval", minutes=5, id="pause_sweep")
+    scheduler.start()
+    app.state.scheduler = scheduler
+
     yield
+    scheduler.shutdown(wait=False)
     await engine.dispose()
     log.info("shutdown")
 
@@ -78,10 +105,20 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.MAX_REQUEST_BYTES)
 
     api_prefix = "/api/v1"
+    app.include_router(analytics.router, prefix=api_prefix)
+    app.include_router(buyer_intelligence.router, prefix=api_prefix)
+    app.include_router(contacts.router, prefix=api_prefix)
+    app.include_router(leads.router, prefix=api_prefix)
+    app.include_router(buyer_leads.router, prefix=api_prefix)
     app.include_router(auth.router, prefix=api_prefix)
+    app.include_router(merchants.router, prefix=api_prefix)
+    app.include_router(merchant_products.router, prefix=api_prefix)
+    app.include_router(wallet.router, prefix=api_prefix)
+    app.include_router(webhooks.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)
     app.include_router(sessions.router, prefix=api_prefix)
     app.include_router(chat.router, prefix=api_prefix)
+    app.include_router(events.router, prefix=api_prefix)
     app.include_router(visualization.router, prefix=api_prefix)
     app.include_router(cart.router, prefix=api_prefix)
     app.include_router(saved.router, prefix=api_prefix)

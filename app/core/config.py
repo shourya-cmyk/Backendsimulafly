@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # Empty / unset → admin endpoints return 503 (disabled).
     ADMIN_API_KEY: str = ""
 
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
     @field_validator("ALLOWED_ORIGINS", "GOOGLE_CLIENT_IDS", mode="before")
     @classmethod
     def _split_csv(cls, v):

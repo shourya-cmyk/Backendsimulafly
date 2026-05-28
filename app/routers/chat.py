@@ -13,7 +13,7 @@ from app.core.rate_limit import limiter
 from app.models.message import Message
 from app.models.session import DesignSession
 from app.schemas.chat import ChatAnalyzeRequest, ChatRequest, ChatResponse, MessageOut
-from app.schemas.product import ProductOut
+from app.schemas.product import MerchantProductOut
 from app.services.azure_ai_client import get_image_client
 from app.services.image_service import persist_base64, persist_image
 from app.services.llm import get_chat_llm
@@ -285,11 +285,37 @@ async def chat(
         design_profile=user.design_profile or {},
     )
 
+    # Phase 4: emit ai_rag_mention for each MerchantProduct the RAG surfaced.
+    # Guard with isinstance — rag_service still returns legacy Product objects;
+    # emission is a no-op until rag_service is migrated (Phase 4b).
+    from app.models.merchant_product import MerchantProduct as _MerchantProduct
+    from app.services.billing import BillingService as _BillingService
+    _mp_products = [p for p in result.products if isinstance(p, _MerchantProduct)]
+    if _mp_products:
+        _billing = _BillingService(db)
+        for _rank, _p in enumerate(_mp_products):
+            try:
+                await _billing.record_event(
+                    event_type="ai_rag_mention",
+                    user_id=user.id,
+                    merchant_id=_p.merchant_id,
+                    product_id=_p.id,
+                    session_id=None,
+                    context={
+                        "prompt": (body.content or "")[:500],
+                        "rank": _rank,
+                    },
+                )
+            except Exception:
+                log.warning("rag_emission_failed", product_id=str(_p.id))
+        for _mid in {_p.merchant_id for _p in _mp_products}:
+            background.add_task(_billing.pause_if_depleted_for, _mid)
+
     ui_payload = None
     if result.products:
         ui_payload = {
             "type": "product_carousel",
-            "products": [ProductOut.model_validate(p).model_dump(mode="json") for p in result.products],
+            "products": [MerchantProductOut.model_validate(p).model_dump(mode="json") for p in result.products],
         }
     elif result.preview_product_ids:
         # Multi-product composite preview (different categories selected together)

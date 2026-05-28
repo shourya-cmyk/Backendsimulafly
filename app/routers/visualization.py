@@ -19,7 +19,7 @@ from collections import defaultdict
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -175,6 +175,7 @@ async def visualize(
     body: VisualizeRequest,
     user: CurrentUser,
     db: DBSession,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     """Kick off image generation in the background.
 
@@ -207,6 +208,22 @@ async def visualize(
     # Fetch all requested products
     products_res = await db.execute(select(Product).where(Product.id.in_(product_ids)))
     products_by_id: dict[uuid.UUID, Product] = {p.id: p for p in products_res.scalars().all()}
+
+    # Fallback to MerchantProduct for any missing IDs
+    missing_ids = [pid for pid in product_ids if pid not in products_by_id]
+    if missing_ids:
+        from app.models.merchant_product import MerchantProduct as _MerchantProduct
+        mp_res = await db.execute(select(_MerchantProduct).where(_MerchantProduct.id.in_(missing_ids)))
+        for mp in mp_res.scalars().all():
+            class MockProduct:
+                def __init__(self, mp_obj):
+                    self.id = mp_obj.id
+                    self.title = mp_obj.title
+                    self.category = mp_obj.category
+                    self.image_url = mp_obj.primary_image_url
+                    self.product_metadata = mp_obj.custom_metadata or {}
+            products_by_id[mp.id] = MockProduct(mp)
+
     missing = [str(pid) for pid in product_ids if pid not in products_by_id]
     if missing:
         raise HTTPException(
@@ -215,6 +232,33 @@ async def visualize(
         )
 
     products = [products_by_id[pid] for pid in product_ids]
+
+    # Phase 4: emit ai_image_generation for each included product that has a
+    # MerchantProduct record. Products here come from the legacy `products` table
+    # (visualization router not yet migrated to merchant_products — Phase 4b).
+    # We look up MerchantProduct by ID to see if a corresponding record exists.
+    from app.models.merchant_product import MerchantProduct as _MerchantProduct
+    from app.services.billing import BillingService as _BillingService
+    _affected_merchants: set[uuid.UUID] = set()
+    _billing_vis = _BillingService(db)
+    for _pid in product_ids:
+        _mp = await db.get(_MerchantProduct, _pid)
+        if not _mp:
+            continue
+        try:
+            await _billing_vis.record_event(
+                event_type="ai_image_generation",
+                user_id=user.id,
+                merchant_id=_mp.merchant_id,
+                product_id=_mp.id,
+                session_id=str(body.session_id),
+                context={},
+            )
+            _affected_merchants.add(_mp.merchant_id)
+        except Exception:
+            pass  # billing must not break visualization
+    for _mid in _affected_merchants:
+        background_tasks.add_task(_billing_vis.pause_if_depleted_for, _mid)
 
     # --- SINGLE product shortcut ---
     if len(products) == 1:

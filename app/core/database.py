@@ -25,14 +25,20 @@ def _build_connect_args(url: str) -> dict:
     return args
 
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    connect_args=_build_connect_args(settings.DATABASE_URL),
-)
+engine_kwargs = {
+    "echo": False,
+    "connect_args": _build_connect_args(settings.DATABASE_URL),
+}
+
+# SQLite doesn't support pool_pre_ping, pool_size, max_overflow
+if "sqlite" not in settings.DATABASE_URL.lower():
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 20,
+    })
+
+engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 

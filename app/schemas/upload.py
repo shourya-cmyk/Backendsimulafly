@@ -12,6 +12,20 @@ class RoomImageUploadRequest(BaseModel):
     media_type: str = Field(default="image/jpeg", max_length=64)
 
 
+class MerchantProductImageUploadRequest(BaseModel):
+    image_base64: str = Field(min_length=10)
+    media_type: str = Field(default="image/jpeg", max_length=64)
+
+
+class MerchantProductImageOut(BaseModel):
+    id: uuid.UUID
+    url: str
+    byte_size: int
+    media_type: str
+    source: str
+    created_at: datetime
+
+
 class RoomImageOut(BaseModel):
     id: uuid.UUID
     byte_size: int

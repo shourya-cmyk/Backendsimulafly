@@ -36,3 +36,18 @@ async def test_upload_rejects_invalid_base64(auth_client):
         json={"image_base64": "!!!not-base64!!!", "media_type": "image/jpeg"},
     )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_upload_merchant_product_image(auth_client):
+    # Smoke test: a small JPEG-ish base64 blob uploads and returns a URL.
+    # The existing upload router uses JSON body with image_base64 (not multipart),
+    # so we follow that pattern here.
+    r = await auth_client.post(
+        "/api/v1/upload/merchant-product-image",
+        json={"image_base64": TINY_JPEG, "media_type": "image/jpeg"},
+    )
+    assert r.status_code in (200, 201), r.text
+    body = r.json()
+    assert "url" in body
+    assert body["url"].startswith("http") or body["url"].startswith("/")
