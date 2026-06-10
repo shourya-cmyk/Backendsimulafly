@@ -1,14 +1,21 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_, and_
 
 from app.models.wallet import Transaction, Wallet
+from app.models.event import LedgerEntry, BuyerEvent
+from app.models.merchant_product import MerchantProduct
+from app.models.merchant import Merchant
 from app.schemas.wallet import (
     PaginatedTransactions,
     TransactionOut,
     WalletOut,
     WalletSettingsUpdate,
+    BalanceHistoryResponse,
+    RedeemRequest,
+    RedeemResponse,
 )
 from app.utils.dependencies import DBSession
 from app.utils.merchant_context import CurrentMerchantContext
@@ -166,3 +173,304 @@ async def topup_confirm(
     await db.commit()
     await db.refresh(wallet)
     return wallet
+
+
+@router.post("/topup/bypass", response_model=WalletOut)
+async def topup_bypass(
+    body: TopupIntentRequest, db: DBSession, ctx: CurrentMerchantContext
+) -> Wallet:
+    """Simulate a successful topup without any payment gateway for development/testing."""
+    txn = Transaction(
+        merchant_id=ctx.merchant.id,
+        amount=Decimal(str(body.amount)),
+        currency=body.currency,
+        status="successful",
+        payment_method="wallet",
+        gateway="bypass_test",
+        gateway_ref=f"bypass_{uuid.uuid4()}",
+    )
+    db.add(txn)
+
+    wallet = await _get_wallet_or_404(db, ctx.merchant.id)
+    wallet.balance = wallet.balance + txn.amount
+    wallet.last_recharged_at = datetime.now(timezone.utc)
+    if wallet.status == "depleted":
+        wallet.status = "active"
+
+    await db.commit()
+    await db.refresh(wallet)
+    return wallet
+
+
+@router.get("/balance-history", response_model=BalanceHistoryResponse)
+async def get_balance_history(
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    time_window: str = Query(default="all_time"),
+    event_filter: str = Query(default="all"),
+) -> dict:
+    wallet = await _get_wallet_or_404(db, ctx.merchant.id)
+    current_balance = float(wallet.balance)
+
+    # 1. Resolve date range filter
+    start_date = None
+    now = datetime.now(timezone.utc)
+    if time_window == "today":
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif time_window == "7_days":
+        start_date = now - timedelta(days=7)
+    elif time_window == "30_days":
+        start_date = now - timedelta(days=30)
+
+    # 2. Query transactions (deposits)
+    txs = []
+    if event_filter in ("all", "topups"):
+        tx_stmt = select(Transaction).where(
+            Transaction.merchant_id == ctx.merchant.id,
+            Transaction.status == "successful"
+        )
+        if start_date:
+            tx_stmt = tx_stmt.where(Transaction.created_at >= start_date)
+        tx_res = await db.execute(tx_stmt)
+        txs = tx_res.scalars().all()
+
+    # 3. Query ledger entries
+    ledgers = []
+    if event_filter != "topups":
+        ledg_stmt = (
+            select(
+                LedgerEntry,
+                BuyerEvent.event_type.label("buyer_event_type"),
+                MerchantProduct.title.label("product_title"),
+                MerchantProduct.sku.label("product_sku"),
+                MerchantProduct.primary_image_url.label("product_image_url")
+            )
+            .outerjoin(BuyerEvent, LedgerEntry.related_event_id == BuyerEvent.id)
+            .outerjoin(MerchantProduct, BuyerEvent.merchant_product_id == MerchantProduct.id)
+            .where(LedgerEntry.merchant_id == ctx.merchant.id)
+        )
+        if start_date:
+            ledg_stmt = ledg_stmt.where(LedgerEntry.created_at >= start_date)
+
+        if event_filter == "add_to_cart":
+            ledg_stmt = ledg_stmt.where(BuyerEvent.event_type == "click")
+        elif event_filter == "views":
+            ledg_stmt = ledg_stmt.where(BuyerEvent.event_type == "impression")
+        elif event_filter == "activity":
+            ledg_stmt = ledg_stmt.where(BuyerEvent.event_type == "ai_rag_mention")
+        elif event_filter == "referrals":
+            ledg_stmt = ledg_stmt.where(
+                or_(
+                    LedgerEntry.reason.like("referral_%"),
+                    LedgerEntry.reason.like("promo_%"),
+                    LedgerEntry.entry_type == "credit"
+                )
+            )
+
+        ledg_res = await db.execute(ledg_stmt)
+        ledgers = ledg_res.all()
+
+    # 4. Map to unified balance history format
+    items = []
+    for tx in txs:
+        items.append({
+            "id": f"tx_{tx.id}",
+            "created_at": tx.created_at,
+            "amount": float(tx.amount),
+            "entry_type": "Deposit",
+            "reason": "topup",
+            "payment_method": tx.payment_method or "UPI",
+            "gateway_ref": tx.gateway_ref,
+            "product": None,
+            "running_balance": 0.0,
+        })
+
+    for row in ledgers:
+        ledg = row[0]
+        be_type = row[1]
+        p_title = row[2]
+        p_sku = row[3]
+        p_img = row[4]
+
+        # Map display name of event type
+        if be_type == "ai_rag_mention":
+            disp_type = "Mention"
+        elif be_type == "click":
+            disp_type = "Add to Cart"
+        elif be_type == "impression":
+            disp_type = "View"
+        elif be_type == "external_redirect":
+            disp_type = "Redirect"
+        elif ledg.entry_type == "credit":
+            disp_type = "Deposit"
+        else:
+            disp_type = ledg.reason.replace("_", " ").title()
+
+        prod = None
+        if p_title:
+            prod = {
+                "title": p_title,
+                "sku": p_sku,
+                "image_url": p_img
+            }
+
+        items.append({
+            "id": f"le_{ledg.id}",
+            "created_at": ledg.created_at,
+            "amount": float(ledg.amount),
+            "entry_type": disp_type,
+            "reason": ledg.reason,
+            "payment_method": None,
+            "gateway_ref": None,
+            "product": prod,
+            "running_balance": 0.0,
+        })
+
+    # 5. Sort descending
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+
+    # 6. Compute running balances going backwards
+    running = current_balance
+    for i in range(len(items)):
+        items[i]["running_balance"] = running
+        running = running - items[i]["amount"]
+
+    # 7. Paginate
+    total = len(items)
+    paginated = items[offset : offset + limit]
+
+    return {
+        "items": paginated,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.post("/redeem", response_model=RedeemResponse)
+async def redeem_code(
+    body: RedeemRequest,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> dict:
+    wallet = await _get_wallet_or_404(db, ctx.merchant.id)
+    code = body.code.strip().upper()
+
+    # Get the redeemer's merchant object
+    redeemer_res = await db.execute(select(Merchant).where(Merchant.id == ctx.merchant.id))
+    redeemer = redeemer_res.scalar_one()
+
+    # 1. Prevent self-redemption
+    if redeemer.referral_code.upper() == code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot redeem your own referral code."
+        )
+
+    # 2. Check if redeemer has already redeemed a coupon/promo code
+    already_redeemed = await db.execute(
+        select(LedgerEntry).where(
+            LedgerEntry.merchant_id == ctx.merchant.id,
+            LedgerEntry.entry_type == "credit",
+            or_(
+                LedgerEntry.reason == "referral_redeem",
+                LedgerEntry.reason.like("promo_%")
+            )
+        )
+    )
+    if already_redeemed.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You have already redeemed a referral or promo code."
+        )
+
+    # 3. Check code type
+    # Check if promo code first
+    promo_amounts = {
+        "WELCOME200": 200.0,
+        "WELCOME500": 500.0,
+        "SIMULA1000": 1000.0,
+        "GIFT1000": 1000.0,
+        "SIMULAFREE": 1000.0,
+    }
+
+    if code in promo_amounts:
+        credit_amount = promo_amounts[code]
+        wallet.balance = wallet.balance + Decimal(str(credit_amount))
+        
+        # Write ledger credit
+        ledger = LedgerEntry(
+            merchant_id=ctx.merchant.id,
+            wallet_id=wallet.id,
+            entry_type="credit",
+            amount=Decimal(str(credit_amount)),
+            reason=f"promo_{code.lower()}",
+            balance_after=wallet.balance,
+            notes=f"Promo code {code} applied"
+        )
+        db.add(ledger)
+        await db.commit()
+        await db.refresh(wallet)
+        
+        return {
+            "message": f"Promo code applied successfully! ₹{credit_amount:,.2f} added to wallet.",
+            "balance": float(wallet.balance),
+            "credit_amount": credit_amount
+        }
+
+    # If not a promo code, check if it is another merchant's referral code
+    ref_res = await db.execute(select(Merchant).where(func.upper(Merchant.referral_code) == code))
+    referrer = ref_res.scalar_one_or_none()
+
+    if not referrer:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired referral or promo code."
+        )
+
+    # Valid referral code of another merchant:
+    # Redeemer gets ₹500
+    redeemer_amount = 500.0
+    wallet.balance = wallet.balance + Decimal(str(redeemer_amount))
+    
+    redeemer_ledger = LedgerEntry(
+        merchant_id=ctx.merchant.id,
+        wallet_id=wallet.id,
+        entry_type="credit",
+        amount=Decimal(str(redeemer_amount)),
+        reason="referral_redeem",
+        balance_after=wallet.balance,
+        notes=f"Referred by {referrer.display_name} ({referrer.referral_code})"
+    )
+    db.add(redeemer_ledger)
+
+    # Referrer gets ₹5,000
+    referrer_amount = 5000.0
+    ref_wallet_res = await db.execute(select(Wallet).where(Wallet.merchant_id == referrer.id))
+    ref_wallet = ref_wallet_res.scalar_one_or_none()
+
+    if ref_wallet:
+        ref_wallet.balance = ref_wallet.balance + Decimal(str(referrer_amount))
+        referrer_ledger = LedgerEntry(
+            merchant_id=referrer.id,
+            wallet_id=ref_wallet.id,
+            entry_type="credit",
+            amount=Decimal(str(referrer_amount)),
+            reason="referral_partner",
+            balance_after=ref_wallet.balance,
+            notes=f"Referral reward from {redeemer.display_name}"
+        )
+        db.add(referrer_ledger)
+
+    await db.commit()
+    await db.refresh(wallet)
+
+    return {
+        "message": f"Referral code accepted! ₹{redeemer_amount:,.2f} credited to your wallet, and ₹{referrer_amount:,.2f} to {referrer.display_name}.",
+        "balance": float(wallet.balance),
+        "credit_amount": redeemer_amount
+    }
+
+

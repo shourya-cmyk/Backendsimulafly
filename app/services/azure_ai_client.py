@@ -73,9 +73,35 @@ class AzureImageClient:
             )
             return await self.image_gen(gen_prompt, size=size)
 
+        import io
+        from PIL import Image
+
+        try:
+            img = Image.open(io.BytesIO(room_bytes))
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            
+            # Crop to square
+            w, h = img.size
+            if w != h:
+                size_min = min(w, h)
+                left = (w - size_min) // 2
+                top = (h - size_min) // 2
+                img = img.crop((left, top, left + size_min, top + size_min))
+            
+            # Ensure it's not too large (max 1024x1024 usually preferred)
+            img.thumbnail((1024, 1024))
+            
+            out = io.BytesIO()
+            img.save(out, format="PNG")
+            png_bytes = out.getvalue()
+        except Exception as e:
+            log.warning("image_edit.png_conversion_failed", error=str(e))
+            png_bytes = room_bytes
+
         url = _deployment_url(self.settings.AZURE_AI_FOUNDRY_ENDPOINT, deployment, "edits")
         files: list[tuple[str, tuple[str, bytes, str]]] = [
-            ("image", ("room.png", room_bytes, "image/png")),
+            ("image", ("room.png", png_bytes, "image/png")),
         ]
         data = {
             "prompt": prompt[:4000],
@@ -156,18 +182,128 @@ class AzureImageClient:
             return _decode_image(resp.json())
 
 
+def _apply_watermark(image_bytes: bytes) -> bytes:
+    import io
+    import os
+    from PIL import Image, ImageDraw, ImageFont
+
+    try:
+        # Load base image
+        base_img = Image.open(io.BytesIO(image_bytes))
+        orig_format = base_img.format or "PNG"
+        
+        # Convert to RGBA for alpha compositing
+        base_rgba = base_img.convert("RGBA")
+        img_w, img_h = base_rgba.size
+
+        # Safety check: if image is too small (e.g. mock 1x1 image), skip watermarking
+        if img_w < 100 or img_h < 100:
+            return image_bytes
+
+        # Load logo image
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(current_dir, "watermark_logo.png")
+        logo_img = None
+        if os.path.exists(logo_path):
+            try:
+                logo_img = Image.open(logo_path).convert("RGBA")
+            except Exception as le:
+                log.warning("watermark.logo_load_failed", error=str(le))
+
+        # Create overlay layer
+        overlay = Image.new("RGBA", base_rgba.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # Measure & configure text
+        text = "simulafly.com"
+        font = None
+        font_paths = [
+            "C:\\Windows\\Fonts\\arial.ttf",
+            "C:\\Windows\\Fonts\\segoeui.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/System/Library/Fonts/Helvetica.ttc"
+        ]
+        for fp in font_paths:
+            if os.path.exists(fp):
+                try:
+                    font = ImageFont.truetype(fp, 16)
+                    break
+                except Exception:
+                    pass
+        if font is None:
+            font = ImageFont.load_default()
+
+        if hasattr(draw, "textbbox"):
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+        else:
+            text_w, text_h = draw.textsize(text, font=font)
+
+        # Layout parameters (minimalist bottom-right alignment)
+        logo_size = 24
+        spacing = 8
+        margin_right = 24
+        margin_bottom = 24
+
+        if logo_img is not None:
+            total_w = logo_size + spacing + text_w
+            logo_x = img_w - total_w - margin_right
+            logo_y = img_h - logo_size - margin_bottom
+
+            # Resize logo
+            logo_resized = logo_img.resize(
+                (logo_size, logo_size),
+                Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.ANTIALIAS
+            )
+            # Paste onto overlay using its alpha channel as mask
+            overlay.paste(logo_resized, (logo_x, logo_y), logo_resized)
+
+            text_x = logo_x + logo_size + spacing
+            text_y = logo_y + (logo_size - text_h) // 2 - 2
+        else:
+            text_x = img_w - text_w - margin_right
+            text_y = img_h - text_h - margin_bottom
+
+        # Draw minimalistic text: semi-transparent white with a thin dark shadow for readability
+        shadow_color = (0, 0, 0, 100)
+        draw.text((text_x + 1, text_y + 1), text, font=font, fill=shadow_color)
+
+        text_color = (255, 255, 255, 180)
+        draw.text((text_x, text_y), text, font=font, fill=text_color)
+
+        # Alpha composite overlay onto base image
+        final_rgba = Image.alpha_composite(base_rgba, overlay)
+
+        # Convert back and save to bytes
+        out_buf = io.BytesIO()
+        if orig_format.upper() in ["JPEG", "JPG"]:
+            final_rgba.convert("RGB").save(out_buf, format="JPEG", quality=95)
+        else:
+            final_rgba.save(out_buf, format="PNG")
+        return out_buf.getvalue()
+    except Exception as ex:
+        log.error("watermark.failed_applying", error=str(ex))
+        return image_bytes
+
+
 def _decode_image(body: dict) -> bytes:
     if not body.get("data"):
         raise ValueError(f"image response missing data: {body}")
     item = body["data"][0]
+    raw_bytes = None
     if "b64_json" in item and item["b64_json"]:
-        return base64.b64decode(item["b64_json"])
-    if "url" in item and item["url"]:
+        raw_bytes = base64.b64decode(item["b64_json"])
+    elif "url" in item and item["url"]:
         with httpx.Client(timeout=60) as c:
             r = c.get(item["url"])
             r.raise_for_status()
-            return r.content
-    raise ValueError(f"image response has neither b64_json nor url: {item}")
+            raw_bytes = r.content
+    else:
+        raise ValueError(f"image response has neither b64_json nor url: {item}")
+    
+    return _apply_watermark(raw_bytes)
 
 
 _client: AzureImageClient | None = None

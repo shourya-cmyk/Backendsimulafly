@@ -400,7 +400,12 @@ async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, d
     from app.models.wallet import Wallet
 
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Publish Gate", "display_name": "PG"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Publish Gate",
+            "display_name": "PG",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
 
@@ -431,3 +436,204 @@ async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, d
     )
     assert r.status_code == 200
     assert r.json()["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_balance_history_unified_and_filtered(auth_client, db_session):
+    import uuid as uuid_mod
+    from decimal import Decimal
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select
+    from app.models.wallet import Wallet, Transaction
+    from app.models.event import LedgerEntry, BuyerEvent
+    from app.models.merchant_product import MerchantProduct
+
+    now = datetime.now(timezone.utc)
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "History Test", "display_name": "HT"}
+    )
+    mid = r.json()["id"]
+    m_uuid = uuid_mod.UUID(mid)
+
+    # 1. Create a product
+    product = MerchantProduct(
+        merchant_id=m_uuid,
+        sku="TEST-SKU-1",
+        title="Test Product",
+        in_app_price=100.00,
+        status="published"
+    )
+    db_session.add(product)
+    await db_session.flush()
+
+    # 2. Add wallet balance and seeding transactions/ledgers
+    res = await db_session.execute(select(Wallet).where(Wallet.merchant_id == m_uuid))
+    wallet = res.scalar_one()
+    wallet.balance = Decimal("700.00")
+
+    # Add successful transaction (+1000)
+    tx = Transaction(
+        merchant_id=m_uuid,
+        amount=Decimal("1000.00"),
+        status="successful",
+        payment_method="UPI",
+        gateway_ref="ref_100",
+        created_at=now - timedelta(hours=2)
+    )
+    db_session.add(tx)
+    await db_session.flush()
+
+    # Add click buyer event
+    click_event = BuyerEvent(
+        user_id=m_uuid,  # dummy user
+        merchant_id=m_uuid,
+        merchant_product_id=product.id,
+        event_type="click",
+        billed=True,
+        created_at=now - timedelta(hours=1)
+    )
+    db_session.add(click_event)
+    await db_session.flush()
+
+    # Add click ledger deduction (-100)
+    le1 = LedgerEntry(
+        merchant_id=m_uuid,
+        wallet_id=wallet.id,
+        related_event_id=click_event.id,
+        entry_type="deduction",
+        amount=Decimal("-100.00"),
+        reason="click",
+        balance_after=Decimal("900.00"),
+        created_at=now - timedelta(hours=1)
+    )
+    db_session.add(le1)
+
+    # Add rag mention buyer event
+    rag_event = BuyerEvent(
+        user_id=m_uuid,
+        merchant_id=m_uuid,
+        merchant_product_id=product.id,
+        event_type="ai_rag_mention",
+        billed=True,
+        created_at=now
+    )
+    db_session.add(rag_event)
+    await db_session.flush()
+
+    # Add rag ledger deduction (-200)
+    le2 = LedgerEntry(
+        merchant_id=m_uuid,
+        wallet_id=wallet.id,
+        related_event_id=rag_event.id,
+        entry_type="deduction",
+        amount=Decimal("-200.00"),
+        reason="ai_rag_mention",
+        balance_after=Decimal("700.00"),
+        created_at=now
+    )
+    db_session.add(le2)
+    await db_session.commit()
+
+    # Test GET /balance-history
+    r = await auth_client.get(
+        "/api/v1/merchant/wallet/balance-history",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 3
+    assert len(body["items"]) == 3
+
+    # Check order: newest first (Mention, then Add to Cart, then Deposit)
+    items = body["items"]
+    assert items[0]["entry_type"] == "Mention"
+    assert items[0]["running_balance"] == 700.0
+    assert items[0]["product"]["sku"] == "TEST-SKU-1"
+
+    assert items[1]["entry_type"] == "Add to Cart"
+    assert items[1]["running_balance"] == 900.0
+
+    assert items[2]["entry_type"] == "Deposit"
+    assert items[2]["running_balance"] == 1000.0
+
+    # Test filtering by event_filter=topups
+    r = await auth_client.get(
+        "/api/v1/merchant/wallet/balance-history?event_filter=topups",
+        headers={"X-Merchant-Id": mid},
+    )
+    assert r.status_code == 200
+    assert r.json()["total"] == 1
+    assert r.json()["items"][0]["entry_type"] == "Deposit"
+
+
+@pytest.mark.asyncio
+async def test_redeem_promo_code_and_referral_code(auth_client, db_session):
+    import uuid as uuid_mod
+    from sqlalchemy import select
+    from app.models.wallet import Wallet
+    from app.models.merchant import Merchant
+
+    # Create Merchant A (Redeemer)
+    r1 = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Merchant A", "display_name": "Merchant A"}
+    )
+    mid_a = r1.json()["id"]
+
+    # Create Merchant B (Referrer)
+    r2 = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "Merchant B", "display_name": "Merchant B"}
+    )
+    mid_b = r2.json()["id"]
+    ref_code_b = r2.json()["referral_code"]
+
+    # 1. Self redemption should fail
+    r = await auth_client.post(
+        "/api/v1/merchant/wallet/redeem",
+        headers={"X-Merchant-Id": mid_b},
+        json={"code": ref_code_b},
+    )
+    assert r.status_code == 400
+    assert "own referral code" in r.json()["detail"]
+
+    # 2. Valid promo code redemption for Merchant A
+    r = await auth_client.post(
+        "/api/v1/merchant/wallet/redeem",
+        headers={"X-Merchant-Id": mid_a},
+        json={"code": "WELCOME500"},
+    )
+    assert r.status_code == 200
+    assert r.json()["credit_amount"] == 500.0
+    assert r.json()["balance"] == 500.0
+
+    # 3. Double redemption of promo code should fail
+    r = await auth_client.post(
+        "/api/v1/merchant/wallet/redeem",
+        headers={"X-Merchant-Id": mid_a},
+        json={"code": "SIMULA1000"},
+    )
+    assert r.status_code == 400
+    assert "already redeemed" in r.json()["detail"]
+
+    # 4. Merchant B redeems Merchant A's referral code (should succeed since Merchant B hasn't redeemed anything yet)
+    ref_code_a = r1.json()["referral_code"]
+    r = await auth_client.post(
+        "/api/v1/merchant/wallet/redeem",
+        headers={"X-Merchant-Id": mid_b},
+        json={"code": ref_code_a},
+    )
+    assert r.status_code == 200
+    assert r.json()["credit_amount"] == 500.0
+
+    # Verify wallet balances
+    # Redeemer (Merchant B) gets +500
+    res_b = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_b)))
+    wallet_b = res_b.scalar_one()
+    assert float(wallet_b.balance) == 500.0
+
+    # Referrer (Merchant A) gets +5000
+    res_a = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_a)))
+    wallet_a = res_a.scalar_one()
+    # Initial balance: 500 (from WELCOME500) + 5000 (from Referral partner bonus) = 5500
+    assert float(wallet_a.balance) == 5500.0
+
+

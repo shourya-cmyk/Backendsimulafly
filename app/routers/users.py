@@ -20,3 +20,10 @@ async def patch_me(body: UserUpdate, user: CurrentUser, db: DBSession) -> User:
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.delete("/me", status_code=204)
+async def delete_me(user: CurrentUser, db: DBSession) -> None:
+    await db.delete(user)
+    await db.commit()
+

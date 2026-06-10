@@ -233,6 +233,31 @@ async def visualize(
 
     products = [products_by_id[pid] for pid in product_ids]
 
+    # Calculate cost (2 Rs per generated image)
+    if len(products) == 1:
+        cost = 2.0
+    else:
+        from collections import defaultdict
+        by_category = defaultdict(list)
+        for p in products:
+            cat = (p.category or "uncategorised").lower()
+            by_category[cat].append(p)
+        unique_categories = list(by_category.keys())
+        if len(unique_categories) == 1:
+            cost = 2.0 * len(products)
+        else:
+            cost = 2.0
+
+    if (user.credit_balance or 0.0) < cost:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"insufficient credits; need at least ₹{cost:.0f}"
+        )
+
+    # Deduct cost
+    user.credit_balance = (user.credit_balance or 0.0) - cost
+    await db.commit()
+
     # Phase 4: emit ai_image_generation for each included product that has a
     # MerchantProduct record. Products here come from the legacy `products` table
     # (visualization router not yet migrated to merchant_products — Phase 4b).

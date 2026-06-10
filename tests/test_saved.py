@@ -2,11 +2,30 @@ import uuid
 
 import pytest
 
-from app.models.product import Product
+from app.models.merchant_product import MerchantProduct
 
 
-async def _seed_product(db_session, *, asin: str = "S001") -> Product:
-    p = Product(asin=asin, title="Saved Sofa", category="Sofa", price=12000.0, rating=4.6)
+async def _seed_product(db_session, *, asin: str = "S001"):
+    from app.models.merchant import Merchant
+
+    m = Merchant(
+        slug=f"dummy-{uuid.uuid4().hex[:6]}",
+        legal_name="Dummy",
+        display_name="Dummy",
+        referral_code=f"DUM-{uuid.uuid4().hex[:6]}",
+        settings={"onboarding_completed": True},
+    )
+    db_session.add(m)
+    await db_session.commit()
+    await db_session.refresh(m)
+
+    p = MerchantProduct(
+        merchant_id=m.id,
+        sku=asin,
+        title="Saved Sofa",
+        category="Sofa",
+        in_app_price=12000.0,
+    )
     db_session.add(p)
     await db_session.commit()
     await db_session.refresh(p)

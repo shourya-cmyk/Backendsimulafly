@@ -9,7 +9,7 @@ from app.core.database import Base
 
 
 class SavedItem(Base):
-    """User wishlist entry — one row per (user, product). Optional `note` lets
+    """User wishlist entry — one row per (user, merchant_product). Optional `note` lets
     the user attach a short reason ("for the bedroom") and `room_session_id`
     optionally pins the save to the design session it came out of."""
 
@@ -24,9 +24,10 @@ class SavedItem(Base):
         nullable=False,
         index=True,
     )
-    product_id: Mapped[uuid.UUID] = mapped_column(
+    # References merchant_products — the live product catalog served to users.
+    merchant_product_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("products.id", ondelete="CASCADE"),
+        ForeignKey("merchant_products.id", ondelete="CASCADE"),
         nullable=False,
     )
     note: Mapped[str | None] = mapped_column(String(280))
@@ -40,9 +41,9 @@ class SavedItem(Base):
     )
 
     user = relationship("User", back_populates="saved_items")
-    product = relationship("Product")
+    merchant_product = relationship("MerchantProduct")
     session = relationship("DesignSession")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_saved_user_product"),
+        UniqueConstraint("user_id", "merchant_product_id", name="uq_saved_user_merchant_product"),
     )

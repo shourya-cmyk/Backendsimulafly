@@ -137,7 +137,12 @@ def test_merchant_product_update_is_all_optional():
 async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_user, db_session):
     # Create a merchant first
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Prod Test", "display_name": "PT"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Prod Test",
+            "display_name": "PT",
+            "settings": {"onboarding_completed": True},
+        },
     )
     assert r.status_code == 201
     mid = r.json()["id"]
@@ -159,7 +164,12 @@ async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_
 @pytest.mark.asyncio
 async def test_create_product_duplicate_sku_returns_409(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Dup", "display_name": "Dup"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Dup",
+            "display_name": "Dup",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
 
@@ -182,11 +192,21 @@ async def test_create_product_duplicate_sku_returns_409(auth_client):
 async def test_list_products_returns_only_this_merchants_products(auth_client, db_session):
     # Create two merchants, two products each
     r1 = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "M1", "display_name": "M1"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "M1",
+            "display_name": "M1",
+            "settings": {"onboarding_completed": True},
+        },
     )
     m1 = r1.json()["id"]
     r2 = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "M2", "display_name": "M2"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "M2",
+            "display_name": "M2",
+            "settings": {"onboarding_completed": True},
+        },
     )
     m2 = r2.json()["id"]
 
@@ -216,7 +236,12 @@ async def test_list_products_returns_only_this_merchants_products(auth_client, d
 @pytest.mark.asyncio
 async def test_list_products_filters_by_status_and_search(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Filt", "display_name": "Filt"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Filt",
+            "display_name": "Filt",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
 
@@ -254,11 +279,21 @@ async def test_list_products_filters_by_status_and_search(auth_client):
 @pytest.mark.asyncio
 async def test_get_product_404_for_other_merchants_product(auth_client, db_session):
     r1 = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Merchant Alpha", "display_name": "Alpha"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Merchant Alpha",
+            "display_name": "Alpha",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mA = r1.json()["id"]
     r2 = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Merchant Beta", "display_name": "Beta"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Merchant Beta",
+            "display_name": "Beta",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mB = r2.json()["id"]
 
@@ -280,7 +315,12 @@ async def test_get_product_404_for_other_merchants_product(auth_client, db_sessi
 @pytest.mark.asyncio
 async def test_update_product_changes_fields_and_triggers_embedding(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Update Test", "display_name": "Update Test"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Update Test",
+            "display_name": "Update Test",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
 
@@ -306,7 +346,12 @@ async def test_update_product_changes_fields_and_triggers_embedding(auth_client)
 @pytest.mark.asyncio
 async def test_archive_product_soft_deletes(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Archive Test", "display_name": "Archive Test"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Archive Test",
+            "display_name": "Archive Test",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
 
@@ -339,7 +384,12 @@ async def test_publish_product_transitions_status(auth_client, db_session):
     from app.models.wallet import Wallet
 
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Publish Test", "display_name": "Publish Test"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Publish Test",
+            "display_name": "Publish Test",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
 
@@ -368,7 +418,12 @@ async def test_publish_product_transitions_status(auth_client, db_session):
 @pytest.mark.asyncio
 async def test_publish_archived_product_returns_400(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Archived Test", "display_name": "Archived Test"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Archived Test",
+            "display_name": "Archived Test",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
     r = await auth_client.post(
@@ -392,7 +447,12 @@ async def test_publish_archived_product_returns_400(auth_client):
 @pytest.mark.asyncio
 async def test_add_external_link_to_product(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "External Links", "display_name": "External"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "External Links",
+            "display_name": "External",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
     r = await auth_client.post(
@@ -427,7 +487,12 @@ async def test_add_external_link_to_product(auth_client):
 @pytest.mark.asyncio
 async def test_update_external_link(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Update Links", "display_name": "Update"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Update Links",
+            "display_name": "Update",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
     r = await auth_client.post(
@@ -457,7 +522,12 @@ async def test_update_external_link(auth_client):
 @pytest.mark.asyncio
 async def test_delete_external_link(auth_client):
     r = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Delete Links", "display_name": "Delete"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Delete Links",
+            "display_name": "Delete",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mid = r.json()["id"]
     r = await auth_client.post(
@@ -488,11 +558,21 @@ async def test_delete_external_link(auth_client):
 @pytest.mark.asyncio
 async def test_external_link_cross_merchant_404(auth_client):
     rA = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Alpha Org", "display_name": "Alpha"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Alpha Org",
+            "display_name": "Alpha",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mA = rA.json()["id"]
     rB = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Beta Org", "display_name": "Beta"}
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Beta Org",
+            "display_name": "Beta",
+            "settings": {"onboarding_completed": True},
+        },
     )
     mB = rB.json()["id"]
 
@@ -510,3 +590,21 @@ async def test_external_link_cross_merchant_404(auth_client):
         json={"platform": "amazon", "url": "https://amazon.in/dp/X"},
     )
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_product_without_onboarding_returns_403(auth_client):
+    r = await auth_client.post(
+        "/api/v1/merchants/", json={"legal_name": "No Onboard Co", "display_name": "No Onboard"}
+    )
+    assert r.status_code == 201
+    mid = r.json()["id"]
+
+    r = await auth_client.post(
+        "/api/v1/merchant/products/",
+        headers={"X-Merchant-Id": mid},
+        json={"sku": "FAIL-ONBOARD", "title": "Should Fail"},
+    )
+    assert r.status_code == 403
+    assert "onboarding" in r.json()["detail"].lower()
+

@@ -54,6 +54,17 @@ async def analyze(
     db: DBSession,
 ) -> ChatResponse:
     session = await _owned_session(db, body.session_id, user.id)
+
+    # Check and deduct credits for makeover if style_name is present
+    if body.style_name:
+        cost = 2.0
+        if (user.credit_balance or 0.0) < cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"insufficient credits; need at least ₹{cost:.0f}"
+            )
+        user.credit_balance = (user.credit_balance or 0.0) - cost
+
     image = await persist_base64(
         db,
         owner_id=user.id,

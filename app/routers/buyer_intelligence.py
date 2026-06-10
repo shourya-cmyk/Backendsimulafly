@@ -269,6 +269,10 @@ async def unlock_shopper(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
 
+    # Credit user ₹20 on merchant unlock
+    user.credit_balance = (user.credit_balance or 0.0) + 20.0
+    await db.commit()
+
     # Fetch latest lead for city + phone
     lead_res = await db.execute(
         select(BuyerLead)
@@ -318,3 +322,223 @@ async def unlock_shopper(
         image_count=int(ev["image_count"]),
         redirect_count=int(ev["redirect_count"]),
     )
+
+
+class ShopperProductInteraction(BaseModel):
+    name: str
+    views: int
+    engagement: str
+
+
+class ShopperTimelineEvent(BaseModel):
+    time: str
+    icon: str
+    text: str
+    type: str
+
+
+class ShopperDetailResponse(BaseModel):
+    user_id: str
+    city: str
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    intent_score: int
+    intent_label: str
+    intent_tier: str
+    unlocked: bool
+    interaction_count: int
+    click_count: int = 0
+    rag_count: int = 0
+    image_count: int = 0
+    redirect_count: int = 0
+    total_orders: int = 0
+    lifetime_spend: float = 0.0
+    viewed_products: list[ShopperProductInteraction] = []
+    timeline: list[ShopperTimelineEvent] = []
+    intent_reasons: list[str] = []
+    suggested_bundle: list[str] = []
+
+
+@router.get("/{user_id}", response_model=ShopperDetailResponse)
+async def shopper_detail(
+    user_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> dict:
+    mid = ctx.merchant.id
+
+    # Fetch user
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Fetch which ones are already unlocked
+    unlocked_res = await db.execute(
+        select(MerchantBuyerAccess).where(
+            MerchantBuyerAccess.merchant_id == mid,
+            MerchantBuyerAccess.user_id == user_id,
+        )
+    )
+    is_unlocked = unlocked_res.scalar_one_or_none() is not None
+
+    # Fetch latest lead for city + phone
+    lead_res = await db.execute(
+        select(BuyerLead)
+        .where(BuyerLead.merchant_id == mid, BuyerLead.user_id == user_id)
+        .order_by(BuyerLead.created_at.desc())
+        .limit(1)
+    )
+    lead = lead_res.scalar_one_or_none()
+
+    # Re-aggregate events for this user
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    sql = text(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
+            COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
+            COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
+            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count,
+            COUNT(*) AS total_interactions
+        FROM buyer_events
+        WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
+        """
+    )
+    ev_res = await db.execute(sql, {"mid": mid, "uid": user_id, "since": since})
+    ev = dict(ev_res.fetchone()._mapping)
+    events = [
+        ("click", ev["click_count"]),
+        ("ai_rag_mention", ev["rag_count"]),
+        ("ai_image_generation", ev["image_count"]),
+        ("external_redirect", ev["redirect_count"]),
+    ]
+    score = _intent_score(events)
+    label, tier = _intent_label(score)
+
+    # Count converted leads and calculate spend
+    orders_stmt = select(func.count(BuyerLead.id), func.coalesce(func.sum(BuyerLead.estimated_value), 0)).where(
+        BuyerLead.merchant_id == mid,
+        BuyerLead.user_id == user_id,
+        BuyerLead.status == "converted",
+    )
+    orders_res = (await db.execute(orders_stmt)).fetchone()
+    total_orders = int(orders_res[0] or 0)
+    lifetime_spend = float(orders_res[1] or 0)
+
+    # Viewed products
+    from app.models.merchant_product import MerchantProduct
+    prod_stmt = (
+        select(
+            BuyerEvent.merchant_product_id,
+            MerchantProduct.title,
+            func.count(BuyerEvent.id).label("views")
+        )
+        .join(MerchantProduct, MerchantProduct.id == BuyerEvent.merchant_product_id)
+        .where(
+            BuyerEvent.merchant_id == mid,
+            BuyerEvent.user_id == user_id,
+            BuyerEvent.merchant_product_id.is_not(None)
+        )
+        .group_by(BuyerEvent.merchant_product_id, MerchantProduct.title)
+        .order_by(func.count(BuyerEvent.id).desc())
+    )
+    prod_rows = (await db.execute(prod_stmt)).all()
+    viewed_products = [
+        {
+            "name": r.title,
+            "views": r.views,
+            "engagement": f"{r.views} interaction{'s' if r.views != 1 else ''} recorded"
+        }
+        for r in prod_rows
+    ]
+
+    # Timeline events
+    timeline_stmt = (
+        select(BuyerEvent)
+        .where(
+            BuyerEvent.merchant_id == mid,
+            BuyerEvent.user_id == user_id
+        )
+        .order_by(BuyerEvent.created_at.desc())
+        .limit(15)
+    )
+    timeline_events = (await db.execute(timeline_stmt)).scalars().all()
+    
+    pids = {e.merchant_product_id for e in timeline_events if e.merchant_product_id}
+    product_titles = {}
+    if pids:
+        p_stmt = select(MerchantProduct.id, MerchantProduct.title).where(MerchantProduct.id.in_(list(pids)))
+        p_rows = (await db.execute(p_stmt)).all()
+        product_titles = {row.id: row.title for row in p_rows}
+
+    timeline = []
+    for event in timeline_events:
+        t = "view"
+        icon = "👁️"
+        text_label = "Interacted with product"
+        if event.event_type == "click":
+            t = "view"
+            icon = "👁️"
+            text_label = "Clicked product details"
+        elif event.event_type == "ai_rag_mention":
+            t = "view"
+            icon = "💬"
+            text_label = "Surfaced in AI search"
+        elif event.event_type == "ai_image_generation":
+            t = "room"
+            icon = "🛋️"
+            text_label = "Generated a room preview"
+        elif event.event_type == "external_redirect":
+            t = "cart"
+            icon = "🛒"
+            text_label = "Redirected to store/cart"
+        
+        title = product_titles.get(event.merchant_product_id)
+        if title:
+            text_label = f"{text_label} for {title}"
+        
+        timeline.append({
+            "time": event.created_at.strftime("%Y-%m-%d %H:%M"),
+            "icon": icon,
+            "text": text_label,
+            "type": t
+        })
+
+    # Intent reasons
+    intent_reasons = []
+    if ev["image_count"] > 0:
+        intent_reasons.append(f"Generated {ev['image_count']} room preview{'s' if ev['image_count'] != 1 else ''}")
+    if ev["click_count"] > 0:
+        intent_reasons.append(f"Clicked product details {ev['click_count']} time{'s' if ev['click_count'] != 1 else ''}")
+    if ev["redirect_count"] > 0:
+        intent_reasons.append(f"Initiated store redirect {ev['redirect_count']} time{'s' if ev['redirect_count'] != 1 else ''}")
+    if ev["rag_count"] > 0:
+        intent_reasons.append(f"Surfaced in AI conversations {ev['rag_count']} time{'s' if ev['rag_count'] != 1 else ''}")
+
+    # Suggested bundle
+    suggested_bundle = [p["name"] for p in viewed_products[:3]]
+
+    return {
+        "user_id": str(user_id),
+        "city": lead.delivery_city if lead else "India",
+        "name": user.full_name if is_unlocked else None,
+        "phone": lead.delivery_phone if (is_unlocked and lead) else None,
+        "email": user.email if is_unlocked else None,
+        "intent_score": score,
+        "intent_label": label,
+        "intent_tier": tier,
+        "unlocked": is_unlocked,
+        "interaction_count": int(ev["total_interactions"]),
+        "click_count": int(ev["click_count"]),
+        "rag_count": int(ev["rag_count"]),
+        "image_count": int(ev["image_count"]),
+        "redirect_count": int(ev["redirect_count"]),
+        "total_orders": total_orders,
+        "lifetime_spend": lifetime_spend,
+        "viewed_products": viewed_products,
+        "timeline": timeline,
+        "intent_reasons": intent_reasons,
+        "suggested_bundle": suggested_bundle,
+    }
+

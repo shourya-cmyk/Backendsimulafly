@@ -10,7 +10,7 @@ from app.schemas.upload import (
     RoomImageOut,
     RoomImageUploadRequest,
 )
-from app.services.image_service import get_owned, persist_base64
+from app.services.image_service import get_image, get_owned, persist_base64
 from app.utils.dependencies import CurrentUser, DBSession
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -45,14 +45,14 @@ async def upload_room_image(
 
 
 @router.get("/room-image/{image_id}")
-async def fetch_room_image(image_id: uuid.UUID, user: CurrentUser, db: DBSession) -> Response:
-    image = await get_owned(db, image_id=image_id, owner_id=user.id)
+async def fetch_room_image(image_id: uuid.UUID, db: DBSession) -> Response:
+    image = await get_image(db, image_id=image_id)
     if not image:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="image not found")
     return Response(
         content=image.data,
         media_type=image.media_type,
-        headers={"Cache-Control": "private, max-age=300"},
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 

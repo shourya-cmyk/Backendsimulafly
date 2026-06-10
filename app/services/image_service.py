@@ -75,3 +75,10 @@ async def get_owned(db: AsyncSession, *, image_id: uuid.UUID, owner_id: uuid.UUI
         select(RoomImage).where(RoomImage.id == image_id, RoomImage.owner_id == owner_id)
     )
     return res.scalar_one_or_none()
+
+
+async def get_image(db: AsyncSession, *, image_id: uuid.UUID) -> RoomImage | None:
+    res = await db.execute(
+        select(RoomImage).where(RoomImage.id == image_id)
+    )
+    return res.scalar_one_or_none()
