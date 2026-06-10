@@ -285,3 +285,51 @@ async def test_remove_member_owner_cannot_remove_self(auth_client, test_user):
     )
     assert r.status_code == 400
     assert "cannot remove" in r.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_nearby_merchants_proximity_sorting(auth_client, db_session):
+    from app.models.merchant import Merchant
+
+    # Create two merchants at different locations
+    # Merchant A is close to user (User is at 12.9716, 77.5946 - Bangalore)
+    # Merchant A is at 12.98, 77.60 (~1-2 km away)
+    # Merchant B is far away, e.g. at 19.0760, 72.8777 (Mumbai)
+    m_close = Merchant(
+        slug="close-store",
+        legal_name="Close Store",
+        display_name="Close",
+        referral_code="SIMULA-CLOSE-1",
+        latitude=12.9800,
+        longitude=77.6000,
+    )
+    m_far = Merchant(
+        slug="far-store",
+        legal_name="Far Store",
+        display_name="Far",
+        referral_code="SIMULA-FAR-1",
+        latitude=19.0760,
+        longitude=72.8777,
+    )
+    db_session.add_all([m_close, m_far])
+    await db_session.commit()
+
+    # Query with user location near Merchant A (Bangalore coords)
+    r = await auth_client.get(
+        "/api/v1/merchants/public/nearby?lat=12.9716&lon=77.5946"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    
+    # Verify both are returned but the closer one is first
+    assert len(body) >= 2
+    slugs = [item["slug"] for item in body]
+    # Finding the relative index since other test merchants might be in db
+    assert slugs.index("close-store") < slugs.index("far-store")
+    
+    # Verify distance field is computed
+    close_item = next(item for item in body if item["slug"] == "close-store")
+    far_item = next(item for item in body if item["slug"] == "far-store")
+    assert close_item["distance"] is not None
+    assert far_item["distance"] is not None
+    assert close_item["distance"] < far_item["distance"]

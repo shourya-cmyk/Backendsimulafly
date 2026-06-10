@@ -15,8 +15,11 @@ class CartItem(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    # References merchant_products — the live product catalog served to users.
+    merchant_product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("merchant_products.id", ondelete="CASCADE"),
+        nullable=False,
     )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
@@ -26,9 +29,9 @@ class CartItem(Base):
     )
 
     user = relationship("User", back_populates="cart_items")
-    product = relationship("Product")
+    merchant_product = relationship("MerchantProduct")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_cart_user_product"),
+        UniqueConstraint("user_id", "merchant_product_id", name="uq_cart_user_merchant_product"),
         CheckConstraint("quantity >= 1 AND quantity <= 10", name="ck_cart_quantity_bounds"),
     )

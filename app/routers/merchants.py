@@ -71,7 +71,11 @@ async def create_merchant(
         country=body.country,
         support_email=body.support_email,
         support_phone=body.support_phone,
+        logo_url=body.logo_url,
+        settings=body.settings or {},
         referral_code=referral,
+        latitude=body.latitude,
+        longitude=body.longitude,
     )
     db.add(merchant)
     await db.flush()
@@ -255,6 +259,62 @@ async def remove_member(
     await db.commit()
 
 
+@router.get("/public/nearby", response_model=list[MerchantOut])
+async def get_nearby_merchants(
+    db: DBSession,
+    lat: float | None = None,
+    lon: float | None = None,
+    category: str | None = None,
+    limit: int = 20,
+) -> list[Merchant]:
+    """Discover merchants for the Shop screen.
+
+    Returns active merchants, optionally ordered by proximity to the provided lat/lon coordinates.
+    """
+    stmt = (
+        select(Merchant)
+        .where(Merchant.status != "suspended")
+    )
+    res = await db.execute(stmt)
+    merchants = list(res.scalars().all())
+
+    if lat is not None and lon is not None:
+        import math
+
+        def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+            R = 6371.0  # Earth's radius in km
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = (
+                math.sin(dlat / 2) ** 2
+                + math.cos(math.radians(lat1))
+                * math.cos(math.radians(lat2))
+                * math.sin(dlon / 2) ** 2
+            )
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+
+        # Attach calculated distance to each merchant object
+        for merchant in merchants:
+            if merchant.latitude is not None and merchant.longitude is not None:
+                merchant.distance = calculate_distance(
+                    lat, lon, merchant.latitude, merchant.longitude
+                )
+            else:
+                merchant.distance = float("inf")
+
+        # Sort by distance
+        merchants.sort(key=lambda m: m.distance)
+    else:
+        # Otherwise sort by newest first (default fallback)
+        from datetime import datetime
+        for merchant in merchants:
+            merchant.distance = None
+        merchants.sort(key=lambda m: m.created_at or datetime.min, reverse=True)
+
+    return merchants[:max(1, min(limit, 50))]
+
+
 @router.get("/public/{lookup_value}", response_model=MerchantOut)
 async def get_public_merchant(
     lookup_value: str,
@@ -311,4 +371,6 @@ async def get_public_merchant_products(
     )
     res = await db.execute(p_stmt)
     return list(res.scalars().all())
+
+
 

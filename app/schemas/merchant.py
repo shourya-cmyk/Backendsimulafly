@@ -14,6 +14,10 @@ class MerchantCreate(BaseModel):
     country: str = Field(default="IN", min_length=2, max_length=2)
     support_email: EmailStr | None = None
     support_phone: str | None = Field(default=None, max_length=50)
+    logo_url: str | None = Field(default=None, max_length=1024)
+    settings: dict | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class MerchantUpdate(BaseModel):
@@ -23,6 +27,8 @@ class MerchantUpdate(BaseModel):
     support_email: EmailStr | None = None
     support_phone: str | None = Field(default=None, max_length=50)
     settings: dict | None = None
+    latitude: float | None = Field(default=None)
+    longitude: float | None = Field(default=None)
 
 
 class MerchantOut(BaseModel):
@@ -39,6 +45,9 @@ class MerchantOut(BaseModel):
     status: MerchantStatusLiteral
     referral_code: str
     settings: dict
+    latitude: float | None = None
+    longitude: float | None = None
+    distance: float | None = None
     created_at: datetime
     updated_at: datetime
 

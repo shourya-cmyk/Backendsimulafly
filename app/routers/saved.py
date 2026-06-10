@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.models.product import Product
+from app.models.merchant_product import MerchantProduct
 from app.models.saved_item import SavedItem
 from app.models.session import DesignSession
 from app.schemas.saved import SavedItemAdd, SavedItemOut, SavedItemUpdate, SavedList
@@ -16,16 +16,27 @@ router = APIRouter(prefix="/saved", tags=["saved"])
 async def _load_saved(db, user_id: uuid.UUID) -> list[SavedItem]:
     res = await db.execute(
         select(SavedItem)
-        .options(selectinload(SavedItem.product))
+        .options(selectinload(SavedItem.merchant_product))
         .where(SavedItem.user_id == user_id)
         .order_by(SavedItem.added_at.desc())
     )
     return list(res.scalars().all())
 
 
+def _item_out(item: SavedItem) -> SavedItemOut:
+    return SavedItemOut(
+        id=item.id,
+        product_id=item.merchant_product_id,
+        note=item.note,
+        room_session_id=item.room_session_id,
+        added_at=item.added_at,
+        product=item.merchant_product,
+    )
+
+
 def _summary(items: list[SavedItem]) -> SavedList:
     return SavedList(
-        items=[SavedItemOut.model_validate(i) for i in items],
+        items=[_item_out(i) for i in items],
         item_count=len(items),
     )
 
@@ -37,7 +48,8 @@ async def list_saved(user: CurrentUser, db: DBSession) -> SavedList:
 
 @router.post("/", response_model=SavedList, status_code=status.HTTP_201_CREATED)
 async def add_saved(body: SavedItemAdd, user: CurrentUser, db: DBSession) -> SavedList:
-    product = await db.get(Product, body.product_id)
+    # body.product_id is the merchant_product_id from the frontend
+    product = await db.get(MerchantProduct, body.product_id)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
 
@@ -51,7 +63,7 @@ async def add_saved(body: SavedItemAdd, user: CurrentUser, db: DBSession) -> Sav
     existing = await db.execute(
         select(SavedItem).where(
             SavedItem.user_id == user.id,
-            SavedItem.product_id == body.product_id,
+            SavedItem.merchant_product_id == body.product_id,
         )
     )
     item = existing.scalar_one_or_none()
@@ -65,7 +77,7 @@ async def add_saved(body: SavedItemAdd, user: CurrentUser, db: DBSession) -> Sav
         db.add(
             SavedItem(
                 user_id=user.id,
-                product_id=body.product_id,
+                merchant_product_id=body.product_id,
                 note=body.note,
                 room_session_id=body.room_session_id,
             )
@@ -77,10 +89,10 @@ async def add_saved(body: SavedItemAdd, user: CurrentUser, db: DBSession) -> Sav
 @router.patch("/{item_id}", response_model=SavedItemOut)
 async def update_saved(
     item_id: uuid.UUID, body: SavedItemUpdate, user: CurrentUser, db: DBSession
-) -> SavedItem:
+) -> SavedItemOut:
     res = await db.execute(
         select(SavedItem)
-        .options(selectinload(SavedItem.product))
+        .options(selectinload(SavedItem.merchant_product))
         .where(SavedItem.id == item_id, SavedItem.user_id == user.id)
     )
     item = res.scalar_one_or_none()
@@ -99,7 +111,7 @@ async def update_saved(
         item.room_session_id = body.room_session_id
     await db.commit()
     await db.refresh(item)
-    return item
+    return _item_out(item)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -120,11 +132,12 @@ async def delete_saved(item_id: uuid.UUID, user: CurrentUser, db: DBSession) -> 
 async def delete_saved_by_product(
     product_id: uuid.UUID, user: CurrentUser, db: DBSession
 ) -> None:
-    """Convenience for the client — unsave by product id, no need to know the
-    saved-row id. Useful for toggling the heart on a product card."""
+    """Convenience for the client — unsave by merchant_product id.
+    Useful for toggling the heart on a product card."""
     res = await db.execute(
         select(SavedItem).where(
-            SavedItem.user_id == user.id, SavedItem.product_id == product_id
+            SavedItem.user_id == user.id,
+            SavedItem.merchant_product_id == product_id,
         )
     )
     item = res.scalar_one_or_none()

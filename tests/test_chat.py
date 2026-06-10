@@ -4,6 +4,8 @@ import uuid
 import pytest
 from langchain_core.messages import AIMessage
 
+from app.models.merchant import Merchant
+from app.models.merchant_product import MerchantProduct
 from app.models.product import Product
 from app.services import rag_service
 from app.services.rag_service import RAGResult, _strip_directives
@@ -41,14 +43,16 @@ def stub_run_rag_turn(monkeypatch, db_session):
         # echo a product carousel when the user mentions 'sofa', otherwise plain text
         products: list = []
         if "sofa" in user_message.lower():
+            from app.models.merchant_product import MerchantProduct
             res = await db.execute(
-                __import__("sqlalchemy").select(Product).where(Product.category == "Sofa").limit(2)
+                __import__("sqlalchemy").select(MerchantProduct).where(MerchantProduct.category == "Sofa").limit(2)
             )
             products = list(res.scalars().all())
         return RAGResult(
             products=products,
             assistant_text=f"Great, here are some options for: {user_message[:40]}",
             preview_product_id=None,
+            preview_product_ids=None,
             shopping_intent=bool(products),
         )
 
@@ -76,8 +80,23 @@ async def test_chat_analyze_persists_context_and_image(auth_client, db_session):
 async def test_chat_turn_returns_carousel_when_sofa_in_catalog(
     auth_client, db_session, stub_run_rag_turn
 ):
-    product = Product(
-        asin="C1", title="Mid-Century Sofa", category="Sofa", price=14999, rating=4.6
+    merchant = Merchant(
+        slug=f"ch-{uuid.uuid4().hex[:6]}",
+        legal_name="Chat Test Merchant",
+        display_name="CTM",
+        referral_code=f"CTM-{uuid.uuid4().hex[:6].upper()}",
+    )
+    db_session.add(merchant)
+    await db_session.commit()
+    await db_session.refresh(merchant)
+
+    product = MerchantProduct(
+        merchant_id=merchant.id,
+        sku="C1",
+        title="Mid-Century Sofa",
+        category="Sofa",
+        in_app_price=14999,
+        status="published",
     )
     db_session.add(product)
     await db_session.commit()
@@ -93,7 +112,7 @@ async def test_chat_turn_returns_carousel_when_sofa_in_catalog(
     body = r.json()
     assert body["content"].startswith("Great, here are some options")
     assert body["ui_payload"]["type"] == "product_carousel"
-    assert any(p["asin"] == "C1" for p in body["ui_payload"]["products"])
+    assert any(p["sku"] == "C1" for p in body["ui_payload"]["products"])
 
 
 @pytest.mark.asyncio
@@ -119,7 +138,7 @@ def test_strip_directives_extracts_preview():
         "PRODUCTS_JSON: [\"abc\"]\n"
         f"PREVIEW_REQUEST: {{\"product_id\": \"{uuid.uuid4()}\"}}"
     )
-    cleaned, preview = _strip_directives(text)
+    cleaned, preview, preview_multi = _strip_directives(text)
     assert "PRODUCTS_JSON" not in cleaned
     assert "PREVIEW_REQUEST" not in cleaned
     assert preview is not None

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProductOut(BaseModel):
+    """Legacy Amazon catalog product — kept for backwards compat with existing DB rows."""
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -16,6 +17,22 @@ class ProductOut(BaseModel):
     product_url: str | None = None
     rating: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict, alias="product_metadata")
+
+
+class MerchantProductSimpleOut(BaseModel):
+    """Lightweight merchant product shape used in cart/saved item responses.
+    Matches the Product Flutter model via fromMerchantProductJson() factory."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    sku: str
+    title: str
+    category: str | None = None
+    in_app_price: float | None = None
+    primary_image_url: str | None = None
+    description: str | None = None
+    brand: str | None = None
+    custom_metadata: dict = Field(default_factory=dict)
 
 
 class MerchantProductOut(BaseModel):

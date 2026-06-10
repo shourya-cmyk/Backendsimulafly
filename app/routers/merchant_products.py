@@ -71,6 +71,11 @@ async def create_product(
     ctx: CurrentMerchantContext,
     background_tasks: BackgroundTasks,
 ) -> MerchantProduct:
+    if not ctx.merchant.settings.get("onboarding_completed", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Merchant onboarding must be completed before adding products.",
+        )
     product = MerchantProduct(
         merchant_id=ctx.merchant.id,
         **body.model_dump(),
@@ -84,10 +89,10 @@ async def create_product(
             status_code=status.HTTP_409_CONFLICT,
             detail="a product with that SKU already exists for this merchant",
         )
-    # Reload with external_links eagerly to avoid lazy-load greenlet errors
+    # Reload eagerly to avoid lazy-load greenlet errors
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id == product.id)
     )
     product = (await db.execute(stmt)).scalar_one()
@@ -105,7 +110,7 @@ async def get_product(
 ) -> MerchantProduct:
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.merchant_id == ctx.merchant.id,
@@ -135,7 +140,7 @@ async def update_product(
 ) -> MerchantProduct:
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.merchant_id == ctx.merchant.id,
@@ -157,10 +162,10 @@ async def update_product(
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="conflict (duplicate SKU?)")
 
-    # Re-fetch with eager-loaded external_links to avoid MissingGreenlet on serialization.
+    # Re-fetch with eager-loaded relations to avoid MissingGreenlet on serialization.
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id == product_id)
     )
     product = (await db.execute(stmt)).scalar_one()
@@ -189,7 +194,7 @@ async def publish_product(
 ) -> MerchantProduct:
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.merchant_id == ctx.merchant.id,
@@ -221,7 +226,7 @@ async def publish_product(
     # Re-fetch for serialization
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id == product_id)
     )
     product = (await db.execute(stmt)).scalar_one()

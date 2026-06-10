@@ -83,3 +83,39 @@ class PricingRuleOut(BaseModel):
     effective_from: datetime
     effective_until: datetime | None
     notes: str | None
+
+
+class BalanceHistoryItemProduct(BaseModel):
+    title: str
+    sku: str
+    image_url: str | None = None
+
+
+class BalanceHistoryItem(BaseModel):
+    id: str
+    created_at: datetime
+    amount: float
+    entry_type: str  # e.g., "Mention", "Add to Cart", "View", "Deposit", "Credit"
+    reason: str
+    payment_method: str | None = None
+    gateway_ref: str | None = None
+    running_balance: float
+    product: BalanceHistoryItemProduct | None = None
+
+
+class BalanceHistoryResponse(BaseModel):
+    items: list[BalanceHistoryItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class RedeemRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+
+
+class RedeemResponse(BaseModel):
+    message: str
+    balance: float
+    credit_amount: float
+

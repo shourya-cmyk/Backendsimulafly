@@ -24,6 +24,11 @@ class BuyerLeadCreate(BaseModel):
     session_id: str | None = None
     delivery_city: str | None = Field(default=None, max_length=100)
     delivery_phone: str | None = Field(default=None, max_length=50)
+    delivery_address_line1: str | None = Field(default=None, max_length=255)
+    delivery_state: str | None = Field(default=None, max_length=100)
+    delivery_pincode: str | None = Field(default=None, max_length=20)
+    delivery_latitude: float | None = None
+    delivery_longitude: float | None = None
     items: list[OrderItemIn] = Field(default_factory=list)
 
 
@@ -43,6 +48,11 @@ class CustomerInfo(BaseModel):
     name: str | None = None
     email: str | None = None
     phone: str | None = None
+    address_line1: str | None = None
+    state: str | None = None
+    pincode: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class OrderOut(BaseModel):

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.models.cart import CartItem
-from app.models.product import Product
+from app.models.merchant_product import MerchantProduct
 from app.schemas.cart import CartItemAdd, CartItemOut, CartItemUpdate, CartSummary
 from app.utils.dependencies import CurrentUser, DBSession
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/cart", tags=["cart"])
 async def _load_cart(db, user_id: uuid.UUID) -> list[CartItem]:
     res = await db.execute(
         select(CartItem)
-        .options(selectinload(CartItem.product))
+        .options(selectinload(CartItem.merchant_product))
         .where(CartItem.user_id == user_id)
         .order_by(CartItem.added_at.desc())
     )
@@ -23,9 +23,21 @@ async def _load_cart(db, user_id: uuid.UUID) -> list[CartItem]:
 
 
 def _summary(items: list[CartItem]) -> CartSummary:
-    total = sum((item.product.price or 0) * item.quantity for item in items)
+    total = sum((item.merchant_product.in_app_price or 0) * item.quantity for item in items)
+    out_items = []
+    for i in items:
+        # Expose merchant_product_id as product_id for API compat
+        out_items.append(
+            CartItemOut(
+                id=i.id,
+                product_id=i.merchant_product_id,
+                quantity=i.quantity,
+                added_at=i.added_at,
+                product=i.merchant_product,
+            )
+        )
     return CartSummary(
-        items=[CartItemOut.model_validate(i) for i in items],
+        items=out_items,
         estimated_total=round(total, 2),
         item_count=sum(i.quantity for i in items),
     )
@@ -39,20 +51,28 @@ async def get_cart(user: CurrentUser, db: DBSession) -> CartSummary:
 
 @router.post("/", response_model=CartSummary, status_code=status.HTTP_201_CREATED)
 async def add_to_cart(body: CartItemAdd, user: CurrentUser, db: DBSession) -> CartSummary:
-    product = await db.get(Product, body.product_id)
+    # body.product_id is the merchant_product_id from the frontend
+    product = await db.get(MerchantProduct, body.product_id)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
 
     existing = await db.execute(
         select(CartItem).where(
-            CartItem.user_id == user.id, CartItem.product_id == body.product_id
+            CartItem.user_id == user.id,
+            CartItem.merchant_product_id == body.product_id,
         )
     )
     item = existing.scalar_one_or_none()
     if item:
-        item.quantity = min(10, item.quantity + body.quantity)
+        item.quantity = min(10, item.quantity + (body.quantity or 1))
     else:
-        db.add(CartItem(user_id=user.id, product_id=body.product_id, quantity=body.quantity))
+        db.add(
+            CartItem(
+                user_id=user.id,
+                merchant_product_id=body.product_id,
+                quantity=body.quantity or 1,
+            )
+        )
     await db.commit()
     items = await _load_cart(db, user.id)
     return _summary(items)
@@ -61,10 +81,10 @@ async def add_to_cart(body: CartItemAdd, user: CurrentUser, db: DBSession) -> Ca
 @router.patch("/{item_id}", response_model=CartItemOut)
 async def update_quantity(
     item_id: uuid.UUID, body: CartItemUpdate, user: CurrentUser, db: DBSession
-) -> CartItem:
+) -> CartItemOut:
     res = await db.execute(
         select(CartItem)
-        .options(selectinload(CartItem.product))
+        .options(selectinload(CartItem.merchant_product))
         .where(CartItem.id == item_id, CartItem.user_id == user.id)
     )
     item = res.scalar_one_or_none()
@@ -73,7 +93,13 @@ async def update_quantity(
     item.quantity = body.quantity
     await db.commit()
     await db.refresh(item)
-    return item
+    return CartItemOut(
+        id=item.id,
+        product_id=item.merchant_product_id,
+        quantity=item.quantity,
+        added_at=item.added_at,
+        product=item.merchant_product,
+    )
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

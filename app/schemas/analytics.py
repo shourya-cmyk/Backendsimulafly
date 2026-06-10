@@ -5,6 +5,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
+class DailyMetric(BaseModel):
+    date: str  # "YYYY-MM-DD"
+    spend: float
+    revenue: float
+
+
 class AnalyticsSummary(BaseModel):
     total_products: int
     published_products: int
@@ -17,6 +23,7 @@ class AnalyticsSummary(BaseModel):
     ctr: float
     start_date: datetime
     end_date: datetime
+    daily_metrics: list[DailyMetric]
 
 
 class ProductPerformanceRow(BaseModel):

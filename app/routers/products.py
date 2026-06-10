@@ -35,7 +35,7 @@ async def search(
         return []
     rows = await db.execute(
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id.in_(ids))
     )
     by_id = {p.id: p for p in rows.scalars().all()}
@@ -53,7 +53,7 @@ async def list_products(
 ):
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(MerchantProduct.status == "published")
     )
     if category:
@@ -69,7 +69,7 @@ async def list_products(
 async def get_product(product_id: uuid.UUID, user: CurrentUser, db: DBSession):
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links))
+        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.status == "published",

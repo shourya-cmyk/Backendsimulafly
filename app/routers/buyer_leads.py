@@ -87,8 +87,9 @@ async def submit_lead(
         product_ids=[str(product.id)],
         ai_interactions_count=ai_count,
         estimated_value=total,
-        delivery_city=body.delivery_city,
-        delivery_phone=body.delivery_phone,
+        # Fall back to user's saved profile if not provided at checkout time
+        delivery_city=body.delivery_city or user.city,
+        delivery_phone=body.delivery_phone or user.phone,
     )
     db.add(lead)
     await db.flush()
@@ -101,8 +102,13 @@ async def submit_lead(
         items=items_payload,
         total_estimated=total,
         delivery_address={
-            "city": body.delivery_city,
-            "phone": body.delivery_phone,
+            "city": lead.delivery_city,
+            "phone": lead.delivery_phone,
+            "address_line1": body.delivery_address_line1 or user.address_line1,
+            "state": body.delivery_state or user.state,
+            "pincode": body.delivery_pincode or user.pincode,
+            "latitude": body.delivery_latitude,
+            "longitude": body.delivery_longitude,
         },
     )
     db.add(order)
@@ -128,6 +134,11 @@ async def submit_lead(
             name=user.full_name,
             email=user.email,
             phone=lead.delivery_phone,
+            address_line1=body.delivery_address_line1 or user.address_line1,
+            state=body.delivery_state or user.state,
+            pincode=body.delivery_pincode or user.pincode,
+            latitude=body.delivery_latitude,
+            longitude=body.delivery_longitude,
         ),
         order=OrderOut(
             id=order.id,
@@ -161,6 +172,9 @@ async def my_leads(
     for lead in leads:
         order_res = await db.execute(select(Order).where(Order.lead_id == lead.id))
         order_row = order_res.scalar_one_or_none()
+        
+        addr_dict = order_row.delivery_address if (order_row and order_row.delivery_address) else {}
+        
         items.append(
             BuyerLeadOut(
                 id=lead.id,
@@ -176,10 +190,15 @@ async def my_leads(
                 created_at=lead.created_at,
                 updated_at=lead.updated_at,
                 customer=CustomerInfo(
-                    city=lead.delivery_city,
+                    city=addr_dict.get("city") or lead.delivery_city,
                     name=user.full_name,
                     email=user.email,
-                    phone=lead.delivery_phone,
+                    phone=addr_dict.get("phone") or lead.delivery_phone,
+                    address_line1=addr_dict.get("address_line1") or user.address_line1,
+                    state=addr_dict.get("state") or user.state,
+                    pincode=addr_dict.get("pincode") or user.pincode,
+                    latitude=addr_dict.get("latitude"),
+                    longitude=addr_dict.get("longitude"),
                 ),
                 order=OrderOut.model_validate(order_row) if order_row else None,
             )

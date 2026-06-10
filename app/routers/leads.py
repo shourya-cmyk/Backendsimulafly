@@ -37,19 +37,28 @@ async def _build_lead_out(
     """Assemble a BuyerLeadOut from the lead row, joining user + order."""
     user = await db.get(User, lead.user_id)
 
-    if reveal_pii and user:
-        customer = CustomerInfo(
-            city=lead.delivery_city,
-            name=user.full_name,
-            email=user.email,
-            phone=lead.delivery_phone,
-        )
-    else:
-        customer = CustomerInfo(city=lead.delivery_city)
-
     res = await db.execute(select(Order).where(Order.lead_id == lead.id))
     order_row = res.scalar_one_or_none()
     order_out = OrderOut.model_validate(order_row) if order_row else None
+
+    addr_dict = order_row.delivery_address if (order_row and order_row.delivery_address) else {}
+
+    if reveal_pii and user:
+        customer = CustomerInfo(
+            city=addr_dict.get("city") or lead.delivery_city,
+            name=user.full_name,
+            email=user.email,
+            phone=addr_dict.get("phone") or lead.delivery_phone,
+            address_line1=addr_dict.get("address_line1") or user.address_line1,
+            state=addr_dict.get("state") or user.state,
+            pincode=addr_dict.get("pincode") or user.pincode,
+            latitude=addr_dict.get("latitude"),
+            longitude=addr_dict.get("longitude"),
+        )
+    else:
+        customer = CustomerInfo(
+            city=addr_dict.get("city") or lead.delivery_city,
+        )
 
     return BuyerLeadOut(
         id=lead.id,
@@ -142,12 +151,39 @@ async def update_lead(
                 order.completed_at = datetime.now(timezone.utc)
                 svc = BillingService(db)
                 await svc.transaction_fee_on_conversion(order=order)
+            
+            # Credit user ₹20 on conversion
+            user_obj = await db.get(User, lead.user_id)
+            if user_obj:
+                user_obj.credit_balance = (user_obj.credit_balance or 0.0) + 20.0
+            
+            # Create order completed notification
+            from app.models.notification import Notification
+            notif = Notification(
+                user_id=lead.user_id,
+                kind="delivery",
+                title="Order Confirmed",
+                summary=f"Your order with {ctx.merchant.display_name} has been confirmed by the merchant!",
+                payload={"lead_id": str(lead.id), "status": "converted"}
+            )
+            db.add(notif)
 
         elif body.status == LeadStatus.SYNCED.value:
             res = await db.execute(select(Order).where(Order.lead_id == lead.id))
             order = res.scalar_one_or_none()
             if order and order.status == OrderStatus.PENDING_MERCHANT_CONTACT.value:
                 order.status = OrderStatus.CONTACTED.value
+                
+                # Create order contacted notification
+                from app.models.notification import Notification
+                notif = Notification(
+                    user_id=lead.user_id,
+                    kind="delivery",
+                    title="Merchant Contacted You",
+                    summary=f"The merchant {ctx.merchant.display_name} has updated your order status to Contacted.",
+                    payload={"lead_id": str(lead.id), "status": "contacted"}
+                )
+                db.add(notif)
 
         elif body.status == LeadStatus.LOST.value:
             res = await db.execute(select(Order).where(Order.lead_id == lead.id))
@@ -156,6 +192,17 @@ async def update_lead(
                 OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value
             ):
                 order.status = OrderStatus.CANCELLED.value
+                
+                # Create order cancelled notification
+                from app.models.notification import Notification
+                notif = Notification(
+                    user_id=lead.user_id,
+                    kind="delivery",
+                    title="Order Cancelled",
+                    summary=f"Your order with {ctx.merchant.display_name} was updated to Cancelled.",
+                    payload={"lead_id": str(lead.id), "status": "lost"}
+                )
+                db.add(notif)
 
     if body.merchant_notes is not None:
         lead.merchant_notes = body.merchant_notes

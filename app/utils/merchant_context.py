@@ -29,23 +29,42 @@ async def get_current_merchant(
     db: DBSession,
     x_merchant_id: Annotated[uuid.UUID, Header(alias="X-Merchant-Id")],
 ) -> MerchantContext:
-    merchant = await db.get(Merchant, x_merchant_id)
-    if not merchant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="merchant not found")
-
-    res = await db.execute(
-        select(MerchantMember).where(
-            MerchantMember.merchant_id == merchant.id,
-            MerchantMember.user_id == user.id,
+    with open("debug.log", "a") as f:
+        f.write(f"DEBUG: get_current_merchant starting for user {user.id}, merchant {x_merchant_id}\n")
+    try:
+        with open("debug.log", "a") as f:
+            f.write("DEBUG: calling db.get(Merchant)\n")
+        merchant = await db.get(Merchant, x_merchant_id)
+        with open("debug.log", "a") as f:
+            f.write(f"DEBUG: db.get(Merchant) finished: {merchant.legal_name if merchant else 'None'}\n")
+        if not merchant:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="merchant not found")
+    
+        with open("debug.log", "a") as f:
+            f.write("DEBUG: executing select(MerchantMember) query\n")
+        res = await db.execute(
+            select(MerchantMember).where(
+                MerchantMember.merchant_id == merchant.id,
+                MerchantMember.user_id == user.id,
+            )
         )
-    )
-    member = res.scalar_one_or_none()
-    if not member:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="not a member of this merchant"
-        )
-
-    return MerchantContext(merchant=merchant, member=member, role=member.role)
+        with open("debug.log", "a") as f:
+            f.write("DEBUG: select(MerchantMember) query executed\n")
+        member = res.scalar_one_or_none()
+        with open("debug.log", "a") as f:
+            f.write(f"DEBUG: MerchantMember role: {member.role if member else 'None'}\n")
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="not a member of this merchant"
+            )
+    
+        with open("debug.log", "a") as f:
+            f.write("DEBUG: get_current_merchant returning success\n")
+        return MerchantContext(merchant=merchant, member=member, role=member.role)
+    except Exception as e:
+        with open("debug.log", "a") as f:
+            f.write(f"DEBUG: get_current_merchant got exception: {e}\n")
+        raise
 
 
 CurrentMerchantContext = Annotated[MerchantContext, Depends(get_current_merchant)]

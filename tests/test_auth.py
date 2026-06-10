@@ -58,3 +58,39 @@ async def test_me_with_valid_token(auth_client, test_user):
     r = await auth_client.get("/api/v1/users/me")
     assert r.status_code == 200
     assert r.json()["id"] == str(test_user.id)
+
+
+@pytest.mark.asyncio
+async def test_update_me_settings(auth_client, test_user):
+    # Initial states
+    assert test_user.push_notifications is True
+    assert test_user.marketing_consent is True
+    assert test_user.model_improvement_consent is False
+    assert test_user.buyer_signal_sharing is True
+
+    # Update preferences
+    r = await auth_client.patch(
+        "/api/v1/users/me",
+        json={
+            "push_notifications": False,
+            "marketing_consent": False,
+            "model_improvement_consent": True,
+            "buyer_signal_sharing": False,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["push_notifications"] is False
+    assert body["marketing_consent"] is False
+    assert body["model_improvement_consent"] is True
+    assert body["buyer_signal_sharing"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_me(auth_client, test_user):
+    r = await auth_client.delete("/api/v1/users/me")
+    assert r.status_code == 204
+    r = await auth_client.get("/api/v1/users/me")
+    assert r.status_code in (401, 403)
+
+

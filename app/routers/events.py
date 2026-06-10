@@ -1,7 +1,7 @@
 """Buyer-facing event ingestion endpoints."""
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -34,6 +34,7 @@ async def record_click(
     db: DBSession,
     background_tasks: BackgroundTasks,
     request: Request,
+    response: Response,
 ):
     product = await db.get(MerchantProduct, body.product_id)
     if not product:
@@ -61,6 +62,7 @@ async def record_external_redirect(
     db: DBSession,
     background_tasks: BackgroundTasks,
     request: Request,
+    response: Response,
 ):
     product = await db.get(MerchantProduct, body.product_id)
     if not product:
@@ -95,6 +97,7 @@ async def record_impression_batch(
     db: DBSession,
     background_tasks: BackgroundTasks,
     request: Request,
+    response: Response,
 ):
     res = await db.execute(
         select(MerchantProduct).where(MerchantProduct.id.in_(body.product_ids))

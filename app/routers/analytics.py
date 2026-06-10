@@ -66,6 +66,50 @@ async def analytics_summary(
     clicks = counts.get("click", 0)
     ctr = clicks / impressions if impressions else 0.0
 
+    # Calculate daily metrics
+    days_list = []
+    curr = start.date()
+    while curr <= end.date():
+        days_list.append(curr)
+        curr += timedelta(days=1)
+
+    daily_data = {d: {"spend": 0.0, "revenue": 0.0} for d in days_list}
+
+    # Fetch daily spend
+    daily_spend_stmt = select(LedgerEntry.created_at, LedgerEntry.amount).where(
+        LedgerEntry.merchant_id == mid,
+        LedgerEntry.entry_type == "deduction",
+        LedgerEntry.created_at.between(start, end),
+    )
+    ledger_rows = (await db.execute(daily_spend_stmt)).all()
+    for created_at, amount in ledger_rows:
+        day_date = created_at.date()
+        if day_date in daily_data:
+            daily_data[day_date]["spend"] += float(-amount)
+
+    # Fetch daily revenue from converted leads
+    from app.models.lead import BuyerLead
+    daily_rev_stmt = select(BuyerLead.converted_at, BuyerLead.estimated_value).where(
+        BuyerLead.merchant_id == mid,
+        BuyerLead.status == "converted",
+        BuyerLead.converted_at.between(start, end),
+    )
+    lead_rows = (await db.execute(daily_rev_stmt)).all()
+    for converted_at, est_val in lead_rows:
+        if converted_at:
+            day_date = converted_at.date()
+            if day_date in daily_data:
+                daily_data[day_date]["revenue"] += float(est_val)
+
+    daily_metrics = [
+        {
+            "date": d.strftime("%Y-%m-%d"),
+            "spend": daily_data[d]["spend"],
+            "revenue": daily_data[d]["revenue"],
+        }
+        for d in days_list
+    ]
+
     return {
         "total_products": total,
         "published_products": published,
@@ -78,6 +122,7 @@ async def analytics_summary(
         "ctr": ctr,
         "start_date": start,
         "end_date": end,
+        "daily_metrics": daily_metrics,
     }
 
 
