@@ -133,12 +133,14 @@ async def analyze(
     # client polls /visualize/{task_id} to know when to refresh.
     makeover_task_id: uuid.UUID | None = None
     if body.style_name:
-        job = create_job(
+        job = await create_job(
+            db,
             user_id=user.id,
             session_id=session.id,
             product_id=None,
             room_image_id=image.id,
         )
+        await db.commit()
         makeover_task_id = job.id
         asyncio.create_task(
             _run_style_makeover(
@@ -228,9 +230,9 @@ async def _run_style_makeover(
                 image_id=generated.id,
             )
             db.add(assistant_msg)
+            await db.flush()
+            await mark_done(db, job_id, image_id=generated.id, message_id=assistant_msg.id)
             await db.commit()
-            await db.refresh(assistant_msg)
-            mark_done(job_id, image_id=generated.id, message_id=assistant_msg.id)
             log.info(
                 "analyze.makeover.done",
                 job_id=str(job_id),
@@ -239,7 +241,7 @@ async def _run_style_makeover(
             )
     except Exception as e:
         log.exception("analyze.makeover.failed", job_id=str(job_id), error=str(e))
-        mark_failed(job_id, str(e))
+        await mark_failed(job_id, str(e))
 
 
 @router.post("/", response_model=ChatResponse)

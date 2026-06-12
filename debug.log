@@ -17310,3 +17310,1033 @@ DEBUG: executing select(MerchantMember) query
 DEBUG: select(MerchantMember) query executed
 DEBUG: MerchantMember role: owner
 DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 58066734-57a4-44c6-8498-4b4e3137c31e, merchant 65fd2c06-29ef-4301-b411-459f4ba7a2ff
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Analytics Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 1e23379b-0002-4d8c-b4c7-b33377415f4d, merchant c203d754-62c1-4dd5-a5af-b38e06c941c2
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Analytics Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 8e766015-8865-47a3-a06f-f7c6fda6735d, merchant cc6240cc-367a-4449-83cb-5a06ad61988e
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Analytics Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user f4cb1b7e-0a3e-4b18-8e33-ce651495142f, merchant 0d15c86a-e0f3-451e-b9f6-45ea8a30259a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Diag
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user aa0a6fbe-642b-4e95-abd7-5ed70f696ce2, merchant 905c932b-6f4a-433d-9ac4-3a450ab6836c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: CRM Test Merchant
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user aa0a6fbe-642b-4e95-abd7-5ed70f696ce2, merchant 905c932b-6f4a-433d-9ac4-3a450ab6836c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: CRM Test Merchant
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user aa0a6fbe-642b-4e95-abd7-5ed70f696ce2, merchant 905c932b-6f4a-433d-9ac4-3a450ab6836c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: CRM Test Merchant
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 759252c9-f166-4192-8432-82fc4ab81eeb, merchant d33d1145-4bf0-4b1f-a4cb-b80da1e34196
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Ctx
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 151f2d95-e07e-4a08-819d-363839a63980, merchant dbd45a37-c304-4421-86c8-70b6b5840743
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Other
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: None
+DEBUG: get_current_merchant got exception: 403: not a member of this merchant
+DEBUG: get_current_merchant starting for user 331b7ca1-55e7-4012-b4b7-d97eaed7150f, merchant 1fcddaa2-eb8f-4006-9e3d-beeef0c40a21
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: None
+DEBUG: get_current_merchant got exception: 404: merchant not found
+DEBUG: get_current_merchant starting for user 7871d4ca-ca1e-49b7-a565-e7c3ef0f698c, merchant b44bd6ae-870b-4f57-bd73-02abb91c67d1
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Prod Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user d25fb068-4d0b-4e35-9075-2e27b09162ec, merchant f15161a6-fa92-4feb-ac46-ecefe04d0f3e
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Dup
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user d25fb068-4d0b-4e35-9075-2e27b09162ec, merchant f15161a6-fa92-4feb-ac46-ecefe04d0f3e
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Dup
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04fa3066-00c3-410f-835d-4c82ebfe407f, merchant 09f454bf-dcc6-493b-8101-8b4b4b40fdf1
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M1
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04fa3066-00c3-410f-835d-4c82ebfe407f, merchant 09f454bf-dcc6-493b-8101-8b4b4b40fdf1
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M1
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04fa3066-00c3-410f-835d-4c82ebfe407f, merchant 5574c225-1543-4cc8-9c4d-b650f24753d8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M2
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04fa3066-00c3-410f-835d-4c82ebfe407f, merchant 5574c225-1543-4cc8-9c4d-b650f24753d8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M2
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04fa3066-00c3-410f-835d-4c82ebfe407f, merchant 5574c225-1543-4cc8-9c4d-b650f24753d8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M2
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04fa3066-00c3-410f-835d-4c82ebfe407f, merchant 09f454bf-dcc6-493b-8101-8b4b4b40fdf1
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M1
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 59d911d5-533c-4331-9f68-d481c84370aa, merchant cb8deff6-bfb5-4f6a-989e-071ba6dd1279
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 59d911d5-533c-4331-9f68-d481c84370aa, merchant cb8deff6-bfb5-4f6a-989e-071ba6dd1279
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 59d911d5-533c-4331-9f68-d481c84370aa, merchant cb8deff6-bfb5-4f6a-989e-071ba6dd1279
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 59d911d5-533c-4331-9f68-d481c84370aa, merchant cb8deff6-bfb5-4f6a-989e-071ba6dd1279
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 59d911d5-533c-4331-9f68-d481c84370aa, merchant cb8deff6-bfb5-4f6a-989e-071ba6dd1279
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 5c8eb703-54c2-4439-8351-1e20ca3cb629, merchant 961be8d5-c12a-4216-9719-71f4fcc52e2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant Alpha
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 5c8eb703-54c2-4439-8351-1e20ca3cb629, merchant a52cd277-e608-48cd-9cc0-31f0bc96bb2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant Beta
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e76f19dc-5aed-426e-989e-b797f0e4fdce, merchant bc215ee3-3647-478c-9338-d24ca1444284
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e76f19dc-5aed-426e-989e-b797f0e4fdce, merchant bc215ee3-3647-478c-9338-d24ca1444284
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 0593e8cf-2a49-4317-bb03-e64d2df68710, merchant f285c8fa-8f4e-4c73-ab14-66fe8ef429ca
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archive Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 0593e8cf-2a49-4317-bb03-e64d2df68710, merchant f285c8fa-8f4e-4c73-ab14-66fe8ef429ca
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archive Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 0593e8cf-2a49-4317-bb03-e64d2df68710, merchant f285c8fa-8f4e-4c73-ab14-66fe8ef429ca
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archive Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user c7501188-f4f1-4162-8d9e-1d3d88c175c2, merchant 3130b345-7bc4-4f31-9bd1-3443873c9941
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user c7501188-f4f1-4162-8d9e-1d3d88c175c2, merchant 3130b345-7bc4-4f31-9bd1-3443873c9941
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 634f4e9c-9b0c-406b-ba20-7b2e1d68bd2e, merchant a03a7ba1-cc96-4d5b-b1af-977c373825f6
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archived Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 634f4e9c-9b0c-406b-ba20-7b2e1d68bd2e, merchant a03a7ba1-cc96-4d5b-b1af-977c373825f6
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archived Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 634f4e9c-9b0c-406b-ba20-7b2e1d68bd2e, merchant a03a7ba1-cc96-4d5b-b1af-977c373825f6
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archived Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 95666ad5-4e27-490a-a4f7-16dda874c4ca, merchant 1647f339-03e0-46f1-92d7-82e3a1eecc7a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: External Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 95666ad5-4e27-490a-a4f7-16dda874c4ca, merchant 1647f339-03e0-46f1-92d7-82e3a1eecc7a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: External Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 95666ad5-4e27-490a-a4f7-16dda874c4ca, merchant 1647f339-03e0-46f1-92d7-82e3a1eecc7a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: External Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 44399fb9-bbb5-4741-9e9a-757aba8f96e4, merchant 100f557e-5dd9-4950-aa18-ce6bebbcf8d5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 44399fb9-bbb5-4741-9e9a-757aba8f96e4, merchant 100f557e-5dd9-4950-aa18-ce6bebbcf8d5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 44399fb9-bbb5-4741-9e9a-757aba8f96e4, merchant 100f557e-5dd9-4950-aa18-ce6bebbcf8d5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 1da204aa-1bc2-407e-ba27-6e96baddc8f3, merchant cff087cf-6bea-4310-a4b7-d21fdd5833ef
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 1da204aa-1bc2-407e-ba27-6e96baddc8f3, merchant cff087cf-6bea-4310-a4b7-d21fdd5833ef
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 1da204aa-1bc2-407e-ba27-6e96baddc8f3, merchant cff087cf-6bea-4310-a4b7-d21fdd5833ef
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 1da204aa-1bc2-407e-ba27-6e96baddc8f3, merchant cff087cf-6bea-4310-a4b7-d21fdd5833ef
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 2fc9a299-3f44-46c1-89c5-93c4cd688635, merchant 435dbfc3-72d5-461a-9de4-e550529b2c5f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Alpha Org
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 2fc9a299-3f44-46c1-89c5-93c4cd688635, merchant cf0c6528-d10b-4868-9b36-dd7e8a91721a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Beta Org
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 9e633947-5a96-4df9-a6a3-a6e03fa6c36b, merchant 85ecf848-ae77-4064-8648-7603b38bc533
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: No Onboard Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 9d052939-daea-4377-9796-2c51bae46cf8, merchant 283b8d52-1b57-4f7f-a96a-51546a067d23
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Foreign
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: None
+DEBUG: get_current_merchant got exception: 403: not a member of this merchant
+DEBUG: get_current_merchant starting for user 0209c834-d94c-4619-9124-b7869f266469, merchant c98928c1-4106-409b-a8c7-69b3d06c7365
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Patch
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: staff
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e889b68f-afa3-41f8-8f27-efd84dd37fce, merchant 7f4556c4-bf00-4f23-a51a-a4f7c838c65a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Team Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user ad30a243-98d2-4285-9f12-2fee3dfb9f5c, merchant eb8df923-ee19-4022-a0aa-2244284c75ad
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Inv Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 830f3e83-0b1b-4ddd-a065-5ab1d32d7db3, merchant 2b06fc8e-91ad-433e-aedc-94ff738d699d
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Unk
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 9a264955-be49-42c8-9c0f-7614900f0b13, merchant c8223233-92d8-4ffa-b8c4-654486756b52
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Role Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user f6817538-b4d2-4ab7-ae9f-1a24ab4c7263, merchant c8223233-92d8-4ffa-b8c4-654486756b52
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Role Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: admin
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user f6817538-b4d2-4ab7-ae9f-1a24ab4c7263, merchant c8223233-92d8-4ffa-b8c4-654486756b52
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Role Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: admin
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 53039198-850f-4b0b-8f97-31bf2fdd407f, merchant 88963c92-a270-4f52-a0f8-1d6602346053
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Self
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user bbf83da0-d0cd-465f-9187-eb82dadbdd6b, merchant 0d3b6944-668e-4beb-8f07-3643fd904002
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Wallet Read
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 614f4252-f17f-4b1c-8fb1-970c6aad7976, merchant 9d285c89-7819-44a8-9e61-ba99ff59fe6c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Txn List
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user ec5c1400-2092-4e9b-acf8-11d2134654a4, merchant 00799c4a-8a5f-4d18-a5ce-3f0879236f3c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Threshold Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user c7a7e7e7-e98c-4498-b08e-102d02dd0281, merchant 01b29b43-a491-4da4-a915-dbc6c7eabbcd
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Intent Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 19f480e8-161f-485d-ac68-8ce955cc885d, merchant b8b1419f-1aa8-4b3f-99df-477d3687c4fd
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Confirm Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 3d73db82-6634-45b7-a895-d4f4e1cd81aa, merchant b606c762-547f-4e53-952f-d92a19538fee
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Idem Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 7480126a-3cc7-4a9b-b086-ee6ea4748e19, merchant 99225ee5-5c9d-42c6-b580-92ed5a74067f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Bad Sig
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04de170d-8a5b-4427-8db5-1d4530369eb0, merchant 190f5f3c-3948-4c24-885d-75931d45f374
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Gate
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04de170d-8a5b-4427-8db5-1d4530369eb0, merchant 190f5f3c-3948-4c24-885d-75931d45f374
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Gate
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 04de170d-8a5b-4427-8db5-1d4530369eb0, merchant 190f5f3c-3948-4c24-885d-75931d45f374
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Gate
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 4786bd8d-4463-4ab3-92ff-657829b63a68, merchant d285c034-2e10-4f2c-a770-1c42466465d7
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: History Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 4786bd8d-4463-4ab3-92ff-657829b63a68, merchant d285c034-2e10-4f2c-a770-1c42466465d7
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: History Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 12850cf2-c72f-4ac7-8a05-1a272fc59a75, merchant 6ee37b67-b3cf-4738-86a8-03d8116a3b1a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant B
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 12850cf2-c72f-4ac7-8a05-1a272fc59a75, merchant 0d4148b2-3c72-41ef-8167-82ba5eb9af3a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant A
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 12850cf2-c72f-4ac7-8a05-1a272fc59a75, merchant 0d4148b2-3c72-41ef-8167-82ba5eb9af3a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant A
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 12850cf2-c72f-4ac7-8a05-1a272fc59a75, merchant 6ee37b67-b3cf-4738-86a8-03d8116a3b1a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant B
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 026f1e83-c8b1-494b-b87b-1309920c3a04, merchant 4ee8c8ab-14d6-4d8a-a67e-5df2eeb3bfa8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Analytics Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 19dbef55-bbfd-4a86-bea6-8a4831e29b9d, merchant b551f4b8-0e42-42ec-abe1-2d77a78a6314
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Analytics Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 01dc8eba-02f0-4db9-b812-963ee40bf0ae, merchant 50e8b9c9-e783-4ecc-a771-7f7ba8670c12
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Analytics Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 7ca22fb9-ce38-43bb-a0e3-e491a0097283, merchant 7c03dc53-29c0-403d-a8a7-173b0445230d
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Diag
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 58b06b2f-5304-4e15-806c-954e3cf1a630, merchant 12993715-b762-42cd-843c-d9a86d1f386a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: CRM Test Merchant
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 58b06b2f-5304-4e15-806c-954e3cf1a630, merchant 12993715-b762-42cd-843c-d9a86d1f386a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: CRM Test Merchant
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 58b06b2f-5304-4e15-806c-954e3cf1a630, merchant 12993715-b762-42cd-843c-d9a86d1f386a
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: CRM Test Merchant
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 28cc2ac5-7351-4f08-a6c0-29705a808bc8, merchant af90b941-2cc8-4ada-bf8e-13b40ba655e5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Ctx
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 08aef5dd-aa73-4c2e-a6b6-200408f3bec0, merchant 3bd88a97-8477-40b2-a81e-3fcd726e3cd8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Other
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: None
+DEBUG: get_current_merchant got exception: 403: not a member of this merchant
+DEBUG: get_current_merchant starting for user c898b18f-4907-447b-bc8c-a3adbc957b56, merchant 42adca79-3d2b-4e94-9fb5-2613ba369d95
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: None
+DEBUG: get_current_merchant got exception: 404: merchant not found
+DEBUG: get_current_merchant starting for user 44d5e5d1-2760-4e1f-a2a9-3cfae96cb2d9, merchant ff763c83-95e2-4800-b11c-8488ceee720c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Prod Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user dd4f7a85-27b1-46db-a541-720d14928cd3, merchant 70f75bcd-e74f-47e4-a6b4-9ae82efef3a5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Dup
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user dd4f7a85-27b1-46db-a541-720d14928cd3, merchant 70f75bcd-e74f-47e4-a6b4-9ae82efef3a5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Dup
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e2f403d6-9c2d-40d4-9537-6b9892761b8c, merchant 85b062c2-1e0a-48ea-a932-3382ae781152
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M1
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e2f403d6-9c2d-40d4-9537-6b9892761b8c, merchant 85b062c2-1e0a-48ea-a932-3382ae781152
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M1
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e2f403d6-9c2d-40d4-9537-6b9892761b8c, merchant 1b4273ee-8a41-433c-8fc7-29626ea1e4a8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M2
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e2f403d6-9c2d-40d4-9537-6b9892761b8c, merchant 1b4273ee-8a41-433c-8fc7-29626ea1e4a8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M2
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e2f403d6-9c2d-40d4-9537-6b9892761b8c, merchant 1b4273ee-8a41-433c-8fc7-29626ea1e4a8
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M2
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e2f403d6-9c2d-40d4-9537-6b9892761b8c, merchant 85b062c2-1e0a-48ea-a932-3382ae781152
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: M1
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 72441e78-8ed2-4d0e-80c7-75b568be07e0, merchant 79672753-eb69-43cc-825c-fd6c88b01b2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 72441e78-8ed2-4d0e-80c7-75b568be07e0, merchant 79672753-eb69-43cc-825c-fd6c88b01b2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 72441e78-8ed2-4d0e-80c7-75b568be07e0, merchant 79672753-eb69-43cc-825c-fd6c88b01b2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 72441e78-8ed2-4d0e-80c7-75b568be07e0, merchant 79672753-eb69-43cc-825c-fd6c88b01b2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 72441e78-8ed2-4d0e-80c7-75b568be07e0, merchant 79672753-eb69-43cc-825c-fd6c88b01b2f
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Filt
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 69b791b5-51ea-4cef-a418-ad8dea05ba73, merchant 43c0d04b-0de9-49ce-8627-6f9656fff915
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant Alpha
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 69b791b5-51ea-4cef-a418-ad8dea05ba73, merchant f61c0968-d4f8-4ade-ac2f-d4ecef14fea9
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant Beta
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 63e1f1d7-bcec-41ae-ae6b-e4790c614cf6, merchant b3c51e91-e18d-479d-82cf-4976a4c9cd35
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 63e1f1d7-bcec-41ae-ae6b-e4790c614cf6, merchant b3c51e91-e18d-479d-82cf-4976a4c9cd35
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user b91524a7-6c35-4fb1-9d13-e18d13b40a43, merchant b9ea5ad8-5efb-418e-9724-c32ecf826d46
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archive Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user b91524a7-6c35-4fb1-9d13-e18d13b40a43, merchant b9ea5ad8-5efb-418e-9724-c32ecf826d46
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archive Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user b91524a7-6c35-4fb1-9d13-e18d13b40a43, merchant b9ea5ad8-5efb-418e-9724-c32ecf826d46
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archive Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 2837e0cf-ef5a-4fd3-81cd-7100d321e3a3, merchant d67a9323-2998-4ecb-b355-d2729eb2eb4c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 2837e0cf-ef5a-4fd3-81cd-7100d321e3a3, merchant d67a9323-2998-4ecb-b355-d2729eb2eb4c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 83a738d4-ff97-4e83-bad9-f03c932108e9, merchant 9eca007a-b0ba-4875-b25a-0dc7202829dc
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archived Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 83a738d4-ff97-4e83-bad9-f03c932108e9, merchant 9eca007a-b0ba-4875-b25a-0dc7202829dc
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archived Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 83a738d4-ff97-4e83-bad9-f03c932108e9, merchant 9eca007a-b0ba-4875-b25a-0dc7202829dc
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Archived Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e0b0fb84-eb63-4bea-a679-5f8267b515ae, merchant 99bf8f11-c36a-417a-baee-2021fb0656dd
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: External Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e0b0fb84-eb63-4bea-a679-5f8267b515ae, merchant 99bf8f11-c36a-417a-baee-2021fb0656dd
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: External Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e0b0fb84-eb63-4bea-a679-5f8267b515ae, merchant 99bf8f11-c36a-417a-baee-2021fb0656dd
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: External Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 709f7cce-9985-4f5c-8976-539001f0381a, merchant c4d3635f-1b14-42c3-87ec-ef16baa6ca4b
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 709f7cce-9985-4f5c-8976-539001f0381a, merchant c4d3635f-1b14-42c3-87ec-ef16baa6ca4b
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 709f7cce-9985-4f5c-8976-539001f0381a, merchant c4d3635f-1b14-42c3-87ec-ef16baa6ca4b
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Update Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 986d950d-062e-4556-839a-ebc3711f61d2, merchant e0f6c375-fc87-4041-98d5-785986859f35
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 986d950d-062e-4556-839a-ebc3711f61d2, merchant e0f6c375-fc87-4041-98d5-785986859f35
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 986d950d-062e-4556-839a-ebc3711f61d2, merchant e0f6c375-fc87-4041-98d5-785986859f35
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 986d950d-062e-4556-839a-ebc3711f61d2, merchant e0f6c375-fc87-4041-98d5-785986859f35
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Delete Links
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user ef3b57ae-c7bf-40a7-b88d-841f0d2ebba3, merchant ee4e47c3-f226-4ebe-ae56-73b4e3662636
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Alpha Org
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user ef3b57ae-c7bf-40a7-b88d-841f0d2ebba3, merchant c763c8da-69bf-405d-ab46-2fddefcc8c91
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Beta Org
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 53e195b3-8d25-4c5e-ae3a-8f485966e7eb, merchant 67f2a3d7-1797-4ce8-bf66-851b3e891caa
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: No Onboard Co
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user fbd118d8-c9e8-48dd-85ca-f53c10318ba2, merchant c4016d9f-75a8-4fe3-acc7-eadef08dbdcb
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Foreign
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: None
+DEBUG: get_current_merchant got exception: 403: not a member of this merchant
+DEBUG: get_current_merchant starting for user 46d5dffb-4cca-4153-a02f-2fb70666e920, merchant 4da4d181-fa67-40c8-9ca2-82a8993ed6e5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Patch
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: staff
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 69b86639-1e48-40ca-b91a-830100b69fce, merchant e5fc8151-bc33-4ad6-9a38-0f55b8e059a4
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Team Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 4e5e0d3d-1cbb-4d8c-ab88-b2794186806d, merchant 6c4ee303-e7a5-41a0-aeb4-4feb315ad9d3
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Inv Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user e35d0114-3148-48b7-9a93-6e885dc34d01, merchant f34ed169-7f3d-48df-8525-bb41e1b4a5c5
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Unk
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 8afd56a7-0d6c-4e87-b28e-27eb20858c2a, merchant 682ccac7-01ab-4795-83aa-fe8ff7958469
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Role Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 989333bd-c148-4b45-ac03-e0feef1c38d2, merchant 682ccac7-01ab-4795-83aa-fe8ff7958469
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Role Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: admin
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 989333bd-c148-4b45-ac03-e0feef1c38d2, merchant 682ccac7-01ab-4795-83aa-fe8ff7958469
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Role Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: admin
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 5d4288ed-e665-4ca6-8ed1-3c031082bbea, merchant 273d934d-e31f-4db4-8553-e821157e9d9d
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Self
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user b43df42f-d9a2-4be1-b8e6-0f441fe6306c, merchant d2233b68-bd0b-4656-b454-c18d668c0112
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Wallet Read
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user a30b2075-5b73-44bb-b928-e0c74d287331, merchant ba6335d1-188d-42a6-8846-78cd191040d2
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Txn List
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user f604fc38-a6a5-4358-83d2-e9b24f122f83, merchant f22f9044-dab4-4702-b07f-9e8b7c2cbef0
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Threshold Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 6c56071f-014f-4602-8911-96c6b40db88c, merchant a3ecfc2c-d4e0-4300-b568-bb5477819d1c
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Intent Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 8e09624a-792c-4d2c-8f06-e19e256244f2, merchant ce5ec792-7304-49ff-9dbe-43550f057394
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Confirm Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 23f99ad0-32c3-4014-84f3-19b73b441955, merchant 5ca4f7e3-20e1-4726-80f2-73dbe50b9f7b
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Idem Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user fde704b0-087a-4901-8383-048c2e26cf77, merchant b390c957-f6b3-43ad-bfae-a1b9f0a685f9
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Bad Sig
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 0823be4e-5e29-430e-92e7-eb20f05e98f0, merchant e4b207e3-c414-4dbe-b7a0-0a1570c9b998
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Gate
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 0823be4e-5e29-430e-92e7-eb20f05e98f0, merchant e4b207e3-c414-4dbe-b7a0-0a1570c9b998
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Gate
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 0823be4e-5e29-430e-92e7-eb20f05e98f0, merchant e4b207e3-c414-4dbe-b7a0-0a1570c9b998
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Publish Gate
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user f5b306d2-4922-4bb0-a474-a41f3f11478d, merchant 83a7f2b0-9aee-4dee-96fc-0f6bed712813
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: History Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user f5b306d2-4922-4bb0-a474-a41f3f11478d, merchant 83a7f2b0-9aee-4dee-96fc-0f6bed712813
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: History Test
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 595be9d2-144a-4d4c-9eb4-5525d7dec8c1, merchant b3955aa3-b736-4ecd-a6d0-447245b14268
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant B
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 595be9d2-144a-4d4c-9eb4-5525d7dec8c1, merchant 1b0f16d2-3a61-421f-882f-42a115e3d307
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant A
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 595be9d2-144a-4d4c-9eb4-5525d7dec8c1, merchant 1b0f16d2-3a61-421f-882f-42a115e3d307
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant A
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success
+DEBUG: get_current_merchant starting for user 595be9d2-144a-4d4c-9eb4-5525d7dec8c1, merchant b3955aa3-b736-4ecd-a6d0-447245b14268
+DEBUG: calling db.get(Merchant)
+DEBUG: db.get(Merchant) finished: Merchant B
+DEBUG: executing select(MerchantMember) query
+DEBUG: select(MerchantMember) query executed
+DEBUG: MerchantMember role: owner
+DEBUG: get_current_merchant returning success

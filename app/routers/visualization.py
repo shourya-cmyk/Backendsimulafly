@@ -288,12 +288,14 @@ async def visualize(
     # --- SINGLE product shortcut ---
     if len(products) == 1:
         p = products[0]
-        job = create_job(
+        job = await create_job(
+            db,
             user_id=user.id,
             session_id=session.id,
             product_id=p.id,
             room_image_id=room_image.id,
         )
+        await db.commit()
         asyncio.create_task(
             _run_single(
                 job_id=job.id,
@@ -320,7 +322,8 @@ async def visualize(
         scene_type: Literal["individual", "composite"] = "individual"
         jobs_created: list[VisualizeJob] = []
         for p in products:
-            job = create_job(
+            job = await create_job(
+                db,
                 user_id=user.id,
                 session_id=session.id,
                 product_id=p.id,
@@ -338,6 +341,7 @@ async def visualize(
                     placement=body.placement,
                 )
             )
+        await db.commit()
         return VisualizeMultiResponse(
             scene_type=scene_type,
             jobs=[
@@ -352,12 +356,14 @@ async def visualize(
     else:
         # Mixed categories → single composite scene
         scene_type = "composite"
-        job = create_job(
+        job = await create_job(
+            db,
             user_id=user.id,
             session_id=session.id,
             product_id=None,           # no single product; composite
             room_image_id=room_image.id,
         )
+        await db.commit()
         asyncio.create_task(
             _run_composite(
                 job_id=job.id,
@@ -383,9 +389,9 @@ async def visualize(
 
 @router.get("/{task_id}", response_model=VisualizeJobOut)
 async def get_visualize_status(
-    task_id: uuid.UUID, user: CurrentUser
+    task_id: uuid.UUID, user: CurrentUser, db: DBSession
 ) -> VisualizeJobOut:
-    job = get_job(task_id)
+    job = await get_job(db, task_id)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
     if job.user_id != user.id:
@@ -463,7 +469,7 @@ async def _run_single(
         )
     except Exception as e:
         log.exception("visualize.single.failed", job_id=str(job_id), error=str(e))
-        mark_failed(job_id, str(e))
+        await mark_failed(job_id, str(e))
 
 
 async def _run_composite(
@@ -504,7 +510,7 @@ async def _run_composite(
         )
     except Exception as e:
         log.exception("visualize.composite.failed", job_id=str(job_id), error=str(e))
-        mark_failed(job_id, str(e))
+        await mark_failed(job_id, str(e))
 
 
 async def _persist_and_mark_done(
@@ -536,9 +542,9 @@ async def _persist_and_mark_done(
             image_id=generated.id,
         )
         db.add(assistant_msg)
+        await db.flush()
+        await mark_done(db, job_id, image_id=generated.id, message_id=assistant_msg.id)
         await db.commit()
-        await db.refresh(assistant_msg)
-        mark_done(job_id, image_id=generated.id, message_id=assistant_msg.id)
         log.info(
             "visualize.done",
             job_id=str(job_id),
