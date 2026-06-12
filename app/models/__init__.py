@@ -24,6 +24,7 @@ from app.models.saved_item import SavedItem
 from app.models.session import DesignSession
 from app.models.style import Style
 from app.models.user import User
+from app.models.visualize_job import VisualizeJob
 from app.models.wallet import (
     Wallet,
     Transaction,
@@ -70,4 +71,5 @@ __all__ = [
     "WalletStatus",
     "TransactionStatus",
     "RateType",
+    "VisualizeJob",
 ]
