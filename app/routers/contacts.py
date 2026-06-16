@@ -207,6 +207,57 @@ async def create_contact(
     return contact
 
 
+@router.get("/{contact_id}", response_model=ContactOut)
+async def get_contact(
+    contact_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> dict:
+    # 1. Check offline contacts
+    contact = await db.get(MerchantContact, contact_id)
+    if contact and contact.merchant_id == ctx.merchant.id:
+        return {
+            "id": contact.id,
+            "merchant_id": contact.merchant_id,
+            "name": contact.name,
+            "phone": contact.phone,
+            "email": contact.email,
+            "source": contact.source,
+            "last_purchase_note": contact.last_purchase_note,
+            "invite_status": contact.invite_status,
+            "notes": contact.notes,
+            "created_at": contact.created_at,
+            "updated_at": contact.updated_at,
+        }
+
+    # 2. Check converted buyer leads (they are implicitly 'joined' contacts)
+    leads_stmt = select(BuyerLead, User).\
+        join(User, BuyerLead.user_id == User.id).\
+        where(BuyerLead.id == contact_id, BuyerLead.merchant_id == ctx.merchant.id, BuyerLead.status == "converted")
+    
+    lead_row = (await db.execute(leads_stmt)).first()
+    if lead_row:
+        lead, user = lead_row
+        phone = lead.delivery_phone or user.phone
+        name = user.full_name or "Valued Buyer"
+        return {
+            "id": lead.id,
+            "merchant_id": lead.merchant_id,
+            "name": name,
+            "phone": phone,
+            "email": user.email,
+            "source": "Checkout",
+            "last_purchase_note": "This week",
+            "invite_status": "joined",
+            "notes": lead.merchant_notes,
+            "created_at": lead.converted_at or lead.created_at,
+            "updated_at": lead.updated_at,
+        }
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="contact not found")
+
+
+
 @router.patch("/{contact_id}", response_model=ContactOut)
 async def update_contact(
     contact_id: uuid.UUID,

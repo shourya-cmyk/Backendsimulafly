@@ -416,7 +416,12 @@ async def test_publish_product_transitions_status(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_publish_archived_product_returns_400(auth_client):
+async def test_publish_archived_product_succeeds(auth_client, db_session):
+    from sqlalchemy import select
+    from decimal import Decimal
+    import uuid as uuid_mod
+    from app.models.wallet import Wallet
+
     r = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -426,6 +431,13 @@ async def test_publish_archived_product_returns_400(auth_client):
         },
     )
     mid = r.json()["id"]
+
+    # Fund wallet so publish passes the wallet check
+    res = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid)))
+    wallet = res.scalar_one()
+    wallet.balance = Decimal("1000")
+    await db_session.commit()
+
     r = await auth_client.post(
         "/api/v1/merchant/products/",
         headers={"X-Merchant-Id": mid},
@@ -441,7 +453,8 @@ async def test_publish_archived_product_returns_400(auth_client):
         f"/api/v1/merchant/products/{pid}/publish",
         headers={"X-Merchant-Id": mid},
     )
-    assert r.status_code == 400
+    assert r.status_code == 200
+    assert r.json()["status"] == "published"
 
 
 @pytest.mark.asyncio

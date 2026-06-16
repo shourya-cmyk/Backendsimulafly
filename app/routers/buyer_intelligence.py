@@ -236,28 +236,78 @@ async def unlock_shopper(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already unlocked")
 
+    # Calculate unlock cost based on intent score
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    sql = text(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
+            COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
+            COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
+            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count
+        FROM buyer_events
+        WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
+        """
+    )
+    ev_res = await db.execute(sql, {"mid": ctx.merchant.id, "uid": user_id, "since": since})
+    ev_row = ev_res.fetchone()
+    
+    click_count = 0
+    rag_count = 0
+    image_count = 0
+    redirect_count = 0
+    if ev_row:
+        ev = dict(ev_row._mapping)
+        click_count = ev.get("click_count") or 0
+        rag_count = ev.get("rag_count") or 0
+        image_count = ev.get("image_count") or 0
+        redirect_count = ev.get("redirect_count") or 0
+
+    events = [
+        ("click", click_count),
+        ("ai_rag_mention", rag_count),
+        ("ai_image_generation", image_count),
+        ("external_redirect", redirect_count),
+    ]
+    score = _intent_score(events)
+    unlock_cost = 30 if score >= 81 else 15
+
     # Check wallet balance
     wallet_res = await db.execute(
         select(Wallet).where(Wallet.merchant_id == ctx.merchant.id)
     )
     wallet = wallet_res.scalar_one_or_none()
-    if not wallet or float(wallet.balance) < UNLOCK_COST:
+    if not wallet or float(wallet.balance) < unlock_cost:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"insufficient wallet balance; need ₹{UNLOCK_COST}",
+            detail=f"insufficient wallet balance; need ₹{unlock_cost}",
         )
 
     # Deduct from wallet
     from decimal import Decimal
-    wallet.balance = wallet.balance - Decimal(str(UNLOCK_COST))
+    wallet.balance = wallet.balance - Decimal(str(unlock_cost))
 
     # Record unlock
     access = MerchantBuyerAccess(
         merchant_id=ctx.merchant.id,
         user_id=user_id,
-        unlock_cost=UNLOCK_COST,
+        unlock_cost=unlock_cost,
     )
     db.add(access)
+
+    # Add ledger entry for unlock deduction
+    from app.models.event import LedgerEntry
+    ledger = LedgerEntry(
+        merchant_id=ctx.merchant.id,
+        wallet_id=wallet.id,
+        entry_type="deduction",
+        amount=Decimal(str(-unlock_cost)),
+        reason="buyer_intel_unlock",
+        balance_after=wallet.balance,
+        notes=f"Unlocked buyer profile ({user_id}) with intent score {score}"
+    )
+    db.add(ledger)
+
     try:
         await db.commit()
     except IntegrityError:

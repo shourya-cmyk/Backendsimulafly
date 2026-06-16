@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint, func, Float
+from sqlalchemy import ForeignKey, String, UniqueConstraint, func, Float, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,10 @@ class Merchant(Base):
     referral_code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_kyc_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    referred_by_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    referral_bonus_paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    kyc_bonus_paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

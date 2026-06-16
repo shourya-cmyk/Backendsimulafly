@@ -12,6 +12,7 @@ class UserOut(BaseModel):
     full_name: str | None = None
     avatar_url: str | None = None
     is_active: bool
+    is_email_verified: bool
     design_profile: dict
     created_at: datetime
     updated_at: datetime
@@ -61,3 +62,4 @@ class UserUpdate(BaseModel):
     push_notifications: bool | None = Field(default=None)
     marketing_consent: bool | None = Field(default=None)
     credit_balance: float | None = Field(default=None)
+    is_email_verified: bool | None = Field(default=None)

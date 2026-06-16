@@ -5,6 +5,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = Field(default=None, max_length=255)
+    referred_by_code: str | None = Field(default=None, max_length=40)
 
 
 class LoginRequest(BaseModel):
@@ -18,6 +19,7 @@ class RefreshRequest(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     id_token: str = Field(min_length=10)
+    referred_by_code: str | None = Field(default=None, max_length=40)
 
 
 class TokenPair(BaseModel):

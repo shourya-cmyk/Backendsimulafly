@@ -9,6 +9,21 @@ class DailyMetric(BaseModel):
     date: str  # "YYYY-MM-DD"
     spend: float
     revenue: float
+    pipeline: float
+    drop_rate: float
+    impressions: int = 0
+    clicks: int = 0
+    interactions: int = 0
+    leads: int = 0
+    converted: int = 0
+    lost: int = 0
+
+
+class RagQueryRow(BaseModel):
+    query: str
+    product_title: str
+    count: int
+    conversion_rate: float = 0.0
 
 
 class AnalyticsSummary(BaseModel):
@@ -24,6 +39,17 @@ class AnalyticsSummary(BaseModel):
     start_date: datetime
     end_date: datetime
     daily_metrics: list[DailyMetric]
+    total_leads: int
+    pipeline_value: float
+    drop_rate: float
+    catalog_published: int
+    catalog_archived: int
+    catalog_draft: int
+    catalog_paused: int
+    top_queries: list[RagQueryRow] = []
+    converted_leads: int = 0
+    pending_leads_count: int = 0
+    reach_count: int = 0
 
 
 class ProductPerformanceRow(BaseModel):
@@ -41,6 +67,12 @@ class ProductPerformanceRow(BaseModel):
     spend: float
     ctr: float
     health_score: str
+    category: str | None = None
+    converted: int = 0
+    est_roas: float = 0.0
+    trend: str | None = None
+    primary_image_url: str | None = None
+    daily_impressions: list[int] = []
 
 
 class ProductPerformanceList(BaseModel):
@@ -52,6 +84,7 @@ class ProductPerformanceList(BaseModel):
 class RagQueryStat(BaseModel):
     query: str
     count: int
+    conversion_rate: float = 0.0
 
 
 class ProductAnalyticsDetail(BaseModel):
@@ -72,6 +105,14 @@ class ProductAnalyticsDetail(BaseModel):
     top_rag_queries: list[RagQueryStat]
     daily_impressions: list[int]
     daily_clicks: list[int]
+    leads_count: int = 0
+    converted_count: int = 0
+    cost_per_lead: float = 0.0
+    avg_sale: float = 0.0
+    token_roas: float = 0.0
+    realized_revenue: float = 0.0
+    potential_pipeline: float = 0.0
+    primary_image_url: str | None = None
 
 
 class DiagnosticAlert(BaseModel):

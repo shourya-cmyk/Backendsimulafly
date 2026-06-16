@@ -25,6 +25,7 @@ from app.models.session import DesignSession
 from app.models.style import Style
 from app.models.user import User
 from app.models.visualize_job import VisualizeJob
+from app.models.otp import OTP
 from app.models.wallet import (
     Wallet,
     Transaction,
@@ -72,4 +73,5 @@ __all__ = [
     "TransactionStatus",
     "RateType",
     "VisualizeJob",
+    "OTP",
 ]

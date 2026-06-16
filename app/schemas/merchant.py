@@ -18,6 +18,7 @@ class MerchantCreate(BaseModel):
     settings: dict | None = None
     latitude: float | None = None
     longitude: float | None = None
+    referred_by_code: str | None = None
 
 
 class MerchantUpdate(BaseModel):
@@ -29,6 +30,7 @@ class MerchantUpdate(BaseModel):
     settings: dict | None = None
     latitude: float | None = Field(default=None)
     longitude: float | None = Field(default=None)
+    is_kyc_completed: bool | None = Field(default=None)
 
 
 class MerchantOut(BaseModel):
@@ -48,6 +50,9 @@ class MerchantOut(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     distance: float | None = None
+    is_kyc_completed: bool
+    referred_by_code: str | None = None
+    referral_bonus_paid: bool
     created_at: datetime
     updated_at: datetime
 

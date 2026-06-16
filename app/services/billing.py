@@ -141,25 +141,13 @@ class BillingService:
         await self.db.flush()
 
     async def transaction_fee_on_conversion(self, *, order: "Order") -> None:
-        """Deduct the simulafly_purchase fee (% of order total) when an order completes."""
-        from app.models.lead import Order  # local import avoids circular deps
-
-        rate, rate_type = await resolve_rate(
-            self.db, "simulafly_purchase", order.merchant_id
-        )
-        if rate <= 0:
-            return
-
-        from decimal import Decimal as _D
-        amount = (
-            _D(str(order.total_estimated)) * rate / _D("100")
-            if rate_type == "percentage"
-            else rate
-        )
+        """Deduct flat 100 INR order confirmation fee when an order completes/is confirmed."""
+        from decimal import Decimal
+        amount = Decimal("100.00")
         await self._deduct(
             merchant_id=order.merchant_id,
             amount=amount,
-            reason="simulafly_purchase",
+            reason="order_confirmation",
         )
         # Note: caller (leads router) calls db.commit() after this
 
