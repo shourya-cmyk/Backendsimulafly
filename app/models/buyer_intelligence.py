@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -71,3 +72,22 @@ class MerchantContact(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class MerchantCampaign(Base):
+    """Stores bulk WhatsApp offer campaigns launched by the merchant."""
+
+    __tablename__ = "merchant_campaigns"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    merchant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("merchants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    product_names: Mapped[str] = mapped_column(Text, nullable=False)
+    discount_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_customers: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    message_template: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

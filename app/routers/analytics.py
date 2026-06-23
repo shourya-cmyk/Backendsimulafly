@@ -545,6 +545,24 @@ async def analytics_products(
     )
     leads = (await db.execute(leads_stmt)).scalars().all()
 
+    # Fetch Order counts per product (payment_received = confirmed converted orders)
+    from app.models.lead import Order, OrderStatus
+    orders_stmt = (
+        select(Order.merchant_product_id, func.count(Order.id).label("cnt"))
+        .where(
+            Order.merchant_id == mid,
+            Order.status.in_([
+                OrderStatus.PAYMENT_RECEIVED.value if hasattr(OrderStatus, 'PAYMENT_RECEIVED') else 'payment_received',
+                OrderStatus.CONFIRMED.value if hasattr(OrderStatus, 'CONFIRMED') else 'confirmed',
+            ])
+        )
+        .group_by(Order.merchant_product_id)
+    )
+    try:
+        orders_by_product = {row[0]: row[1] for row in (await db.execute(orders_stmt)).all()}
+    except Exception:
+        orders_by_product = {}
+
     items = []
     for pid, p in products.items():
         c = counts_by_product.get(pid, {})
@@ -558,6 +576,9 @@ async def analytics_products(
 
         spend = spend_by_product.get(pid, 0.0)
         est_roas = (realized_revenue / spend) if spend > 0 else 0.0
+
+        orders_count = orders_by_product.get(pid, 0)
+        est_ros = (orders_count / spend) if spend > 0 else 0.0
 
         # Generate trend message
         if p.status == "paused_insufficient_funds" or p.status == "archived":
@@ -588,6 +609,8 @@ async def analytics_products(
                 "category": p.category,
                 "converted": converted_count,
                 "est_roas": est_roas,
+                "est_ros": est_ros,
+                "orders_count": orders_count,
                 "trend": trend_desc,
                 "primary_image_url": p.primary_image_url,
                 "daily_impressions": daily_impressions_by_product.get(pid, [0] * 7),

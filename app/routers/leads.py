@@ -70,6 +70,7 @@ async def _build_lead_out(
         ai_generated_image_url=lead.ai_generated_image_url,
         delivery_city=lead.delivery_city,
         merchant_notes=lead.merchant_notes,
+        cancellation_reason=lead.cancellation_reason,
         converted_at=lead.converted_at,
         created_at=lead.created_at,
         updated_at=lead.updated_at,
@@ -186,21 +187,43 @@ async def update_lead(
                 db.add(notif)
 
         elif body.status == LeadStatus.LOST.value:
+            # Persist cancellation reason if provided
+            if body.cancellation_reason is not None:
+                lead.cancellation_reason = body.cancellation_reason.model_dump()
+
             res = await db.execute(select(Order).where(Order.lead_id == lead.id))
             order = res.scalar_one_or_none()
             if order and order.status not in (
                 OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value
             ):
                 order.status = OrderStatus.CANCELLED.value
-                
+
+                # Build a human-readable reason string for the notification
+                reason_parts = []
+                if body.cancellation_reason:
+                    reason_parts.append(
+                        f"{body.cancellation_reason.parent_reason} › "
+                        f"{body.cancellation_reason.child_reason}"
+                    )
+                    if body.cancellation_reason.note:
+                        reason_parts.append(body.cancellation_reason.note)
+                reason_text = ": ".join(reason_parts) if reason_parts else "No reason provided"
+
                 # Create order cancelled notification
                 from app.models.notification import Notification
                 notif = Notification(
                     user_id=lead.user_id,
                     kind="delivery",
                     title="Order Cancelled",
-                    summary=f"Your order with {ctx.merchant.display_name} was updated to Cancelled.",
-                    payload={"lead_id": str(lead.id), "status": "lost"}
+                    summary=(
+                        f"Your order with {ctx.merchant.display_name} was cancelled. "
+                        f"Reason: {reason_text}"
+                    ),
+                    payload={
+                        "lead_id": str(lead.id),
+                        "status": "lost",
+                        "cancellation_reason": lead.cancellation_reason,
+                    }
                 )
                 db.add(notif)
 

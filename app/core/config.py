@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, List
 
@@ -48,6 +49,34 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
+
+    # --- Admin panel backend settings ---
+    # Admin JWT lifetimes (separate from buyer-app tokens; aud="simulafly-admin").
+    ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ADMIN_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Admin login throttling / brute-force lockout.
+    ADMIN_LOGIN_MAX_ATTEMPTS: int = 5
+    ADMIN_LOGIN_WINDOW_SECONDS: int = 900
+    ADMIN_LOGIN_LOCKOUT_SECONDS: int = 900
+
+    # Per-admin API rate limit.
+    ADMIN_RATE_LIMIT_PER_MINUTE: int = 120
+
+    # Wallet-risk alert threshold; wallets below this balance are flagged (R6.10, default ₹100).
+    ADMIN_WALLET_RISK_THRESHOLD: Decimal = Decimal("100")
+
+    # Pagination / bulk-operation limits for admin list and bulk endpoints.
+    ADMIN_DEFAULT_PAGE_SIZE: int = 25
+    ADMIN_MAX_PAGE_SIZE: int = 100
+    ADMIN_MAX_BULK_RECORDS: int = 100
+
+    # First-run bootstrap of a Super Admin account (so admin login is usable on
+    # a fresh deploy). If either email or password is empty, bootstrap no-ops.
+    # See app/services/admin/admin_bootstrap.py::bootstrap_super_admin.
+    ADMIN_BOOTSTRAP_EMAIL: str = ""
+    ADMIN_BOOTSTRAP_PASSWORD: str = ""
+    ADMIN_BOOTSTRAP_FULL_NAME: str = "Super Admin"
 
     @field_validator("ALLOWED_ORIGINS", "GOOGLE_CLIENT_IDS", mode="before")
     @classmethod

@@ -70,6 +70,8 @@ class ProductPerformanceRow(BaseModel):
     category: str | None = None
     converted: int = 0
     est_roas: float = 0.0
+    est_ros: float = 0.0
+    orders_count: int = 0
     trend: str | None = None
     primary_image_url: str | None = None
     daily_impressions: list[int] = []
