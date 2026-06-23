@@ -630,10 +630,10 @@ async def test_redeem_promo_code_and_referral_code(auth_client, db_session):
     wallet_b = res_b.scalar_one()
     assert float(wallet_b.balance) == 500.0
 
-    # Referrer (Merchant A) gets +5000
+    # Referrer (Merchant A) gets +500
     res_a = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_a)))
     wallet_a = res_a.scalar_one()
-    # Initial balance: 500 (from WELCOME500) + 5000 (from Referral partner bonus) = 5500
-    assert float(wallet_a.balance) == 5500.0
+    # Initial balance: 500 (from WELCOME500) + 500 (from Referral partner bonus) = 1000
+    assert float(wallet_a.balance) == 1000.0
 
 

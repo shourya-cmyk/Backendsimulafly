@@ -24,6 +24,9 @@ async def resolve_rate(
 
     Returns (0.0, "fixed") if no matching rule exists.
     """
+    if event_type == "external_redirect":
+        return Decimal("100.00"), "fixed"
+
     now = datetime.now(timezone.utc)
 
     # First check for a per-merchant override

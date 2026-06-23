@@ -34,10 +34,18 @@ class BuyerLeadCreate(BaseModel):
 
 # ── Merchant-facing input ────────────────────────────────────────────────────
 
+class CancellationReason(BaseModel):
+    """Structured reason a merchant provides when cancelling an order."""
+    parent_reason: str
+    child_reason: str
+    note: str | None = None
+
+
 class BuyerLeadUpdate(BaseModel):
     """Merchant PATCH — update status and/or notes."""
     status: str | None = None   # new|synced|converted|lost
     merchant_notes: str | None = None
+    cancellation_reason: CancellationReason | None = None
 
 
 # ── Shared output types ───────────────────────────────────────────────────────
@@ -79,6 +87,7 @@ class BuyerLeadOut(BaseModel):
     ai_generated_image_url: str | None = None
     delivery_city: str | None = None
     merchant_notes: str | None = None
+    cancellation_reason: dict | None = None
     converted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

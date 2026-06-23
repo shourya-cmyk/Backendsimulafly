@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, engine, ping_db
 from app.core.logging import configure_logging, get_logger
 from app.core.rate_limit import limiter
+from app.routers.admin import router as admin_router
 from app.routers import (
     analytics,
     auth,
@@ -58,6 +59,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         log.warning("style_seed_skipped", error=str(e))
 
+    # First-run bootstrap of admin RBAC (predefined roles + permission catalog)
+    # and a Super Admin account from env vars, so admin login is usable on a
+    # fresh deploy. Both are idempotent. Failures are logged but never block
+    # startup — the rest of the app remains usable.
+    try:
+        from app.services.admin.admin_bootstrap import bootstrap_super_admin
+        from app.services.admin.rbac_seed import seed_rbac_if_empty
+        async with SessionLocal() as db:
+            await seed_rbac_if_empty(db)
+            await bootstrap_super_admin(db)
+    except Exception as e:  # noqa: BLE001
+        log.warning("admin_bootstrap_skipped", error=str(e))
+
     # Phase 4: periodic pause-if-depleted sweep
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from app.services.billing import BillingService
@@ -69,8 +83,49 @@ async def lifespan(app: FastAPI):
             if paused > 0:
                 log.info("pause_sweep_paused_merchants", count=paused)
 
+    # Phase 5 (admin panel): periodic derived-state sweeps. Both are
+    # side-effect-light and non-destructive — they evaluate the same derived
+    # predicates the admin API exposes (overdue invoices = unpaid AND past due;
+    # SLA breach = unresolved AND past sla_due_at) and emit counters for
+    # observability without mutating any rows.
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func, select
+
+    from app.models.invoice import Invoice, InvoiceStatus
+    from app.models.support import SupportTicket, SupportTicketStatus
+
+    async def _overdue_invoice_sweep():
+        now = datetime.now(timezone.utc)
+        async with SessionLocal() as db:
+            stmt = select(func.count()).select_from(Invoice).where(
+                Invoice.deleted_at.is_(None),
+                Invoice.status == InvoiceStatus.UNPAID.value,
+                Invoice.due_date < now,
+            )
+            overdue = (await db.execute(stmt)).scalar_one()
+        if overdue > 0:
+            log.info("overdue_invoice_sweep", count=overdue)
+
+    async def _sla_breach_sweep():
+        now = datetime.now(timezone.utc)
+        async with SessionLocal() as db:
+            stmt = select(func.count()).select_from(SupportTicket).where(
+                SupportTicket.deleted_at.is_(None),
+                SupportTicket.status != SupportTicketStatus.RESOLVED.value,
+                SupportTicket.sla_due_at.is_not(None),
+                SupportTicket.sla_due_at < now,
+            )
+            breached = (await db.execute(stmt)).scalar_one()
+        if breached > 0:
+            log.info("sla_breach_sweep", count=breached)
+
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_pause_sweep, "interval", minutes=5, id="pause_sweep")
+    scheduler.add_job(
+        _overdue_invoice_sweep, "interval", minutes=5, id="overdue_invoice_sweep"
+    )
+    scheduler.add_job(_sla_breach_sweep, "interval", minutes=5, id="sla_breach_sweep")
     scheduler.start()
     app.state.scheduler = scheduler
 
@@ -126,6 +181,7 @@ def create_app() -> FastAPI:
     app.include_router(products.router, prefix=api_prefix)
     app.include_router(styles.router, prefix=api_prefix)
     app.include_router(upload.router, prefix=api_prefix)
+    app.include_router(admin_router, prefix=api_prefix)
 
     # Static style images — served at /static/styles/imageN.jpg.
     # Source: `data/style_templates/images/` (compressed from PNG → JPEG).

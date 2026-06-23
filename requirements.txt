@@ -26,7 +26,8 @@ pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==6.0.0
 factory-boy==3.3.1
-Pillow==11.1.0
+hypothesis==6.122.3
+Pillow==10.3.0
 google-auth==2.35.0
 apscheduler>=3.10,<4.0
 setuptools<=80.10.2

@@ -1,17 +1,15 @@
 """Merchant Contacts (My Customers CRM) endpoints."""
 from __future__ import annotations
 
-import csv
-import io
 import uuid
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 
-from app.models.buyer_intelligence import MerchantContact
+from app.models.buyer_intelligence import MerchantContact, MerchantCampaign
 from app.models.lead import BuyerLead, Order
 from app.models.user import User
 from app.utils.dependencies import DBSession
@@ -23,14 +21,13 @@ InviteStatusLiteral = Literal["not_invited", "invited", "joined"]
 SourceLiteral = Literal["csv", "whatsapp", "manual"]
 
 
-class ContactCreate(BaseModel):
-    name: str
-    phone: str | None = None
-    email: str | None = None
-    source: SourceLiteral = "manual"
-    last_purchase_note: str | None = None
-    invite_status: InviteStatusLiteral = "not_invited"
-    notes: str | None = None
+class BulkOfferCampaign(BaseModel):
+    contact_ids: list[uuid.UUID]
+    products: list[str]
+    discount: int
+    max_customers: int
+    max_days: int
+    message: str
 
 
 class ContactUpdate(BaseModel):
@@ -194,17 +191,89 @@ async def list_contacts(
     return {"items": paginated_items, "total": total, "limit": limit, "offset": offset}
 
 
-@router.post("/", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
-async def create_contact(
-    body: ContactCreate,
+@router.post("/bulk-offer", status_code=status.HTTP_201_CREATED)
+async def launch_bulk_offer(
+    body: BulkOfferCampaign,
     db: DBSession,
     ctx: CurrentMerchantContext,
-) -> MerchantContact:
-    contact = MerchantContact(merchant_id=ctx.merchant.id, **body.model_dump())
-    db.add(contact)
+):
+    campaign = MerchantCampaign(
+        merchant_id=ctx.merchant.id,
+        product_names=",".join(body.products),
+        discount_percentage=body.discount,
+        max_customers=body.max_customers,
+        max_days=body.max_days,
+        message_template=body.message,
+    )
+    db.add(campaign)
+    
+    if body.contact_ids:
+        # Update target contacts to "invited" status
+        stmt = select(MerchantContact).where(
+            MerchantContact.merchant_id == ctx.merchant.id,
+            MerchantContact.id.in_(body.contact_ids)
+        )
+        contacts = (await db.execute(stmt)).scalars().all()
+        for c in contacts:
+            c.invite_status = "invited"
+            
     await db.commit()
-    await db.refresh(contact)
-    return contact
+    return {
+        "campaign_id": str(campaign.id),
+        "sent_count": len(body.contact_ids),
+        "message": "WhatsApp bulk offer campaign launched successfully"
+    }
+
+
+@router.get("/{contact_id}", response_model=ContactOut)
+async def get_contact(
+    contact_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext,
+) -> dict:
+    # 1. Check offline contacts
+    contact = await db.get(MerchantContact, contact_id)
+    if contact and contact.merchant_id == ctx.merchant.id:
+        return {
+            "id": contact.id,
+            "merchant_id": contact.merchant_id,
+            "name": contact.name,
+            "phone": contact.phone,
+            "email": contact.email,
+            "source": contact.source,
+            "last_purchase_note": contact.last_purchase_note,
+            "invite_status": contact.invite_status,
+            "notes": contact.notes,
+            "created_at": contact.created_at,
+            "updated_at": contact.updated_at,
+        }
+
+    # 2. Check converted buyer leads (they are implicitly 'joined' contacts)
+    leads_stmt = select(BuyerLead, User).\
+        join(User, BuyerLead.user_id == User.id).\
+        where(BuyerLead.id == contact_id, BuyerLead.merchant_id == ctx.merchant.id, BuyerLead.status == "converted")
+    
+    lead_row = (await db.execute(leads_stmt)).first()
+    if lead_row:
+        lead, user = lead_row
+        phone = lead.delivery_phone or user.phone
+        name = user.full_name or "Valued Buyer"
+        return {
+            "id": lead.id,
+            "merchant_id": lead.merchant_id,
+            "name": name,
+            "phone": phone,
+            "email": user.email,
+            "source": "Checkout",
+            "last_purchase_note": "This week",
+            "invite_status": "joined",
+            "notes": lead.merchant_notes,
+            "created_at": lead.converted_at or lead.created_at,
+            "updated_at": lead.updated_at,
+        }
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="contact not found")
+
 
 
 @router.patch("/{contact_id}", response_model=ContactOut)
@@ -237,56 +306,4 @@ async def delete_contact(
     await db.commit()
 
 
-@router.post("/csv-import", response_model=list[ContactOut], status_code=status.HTTP_201_CREATED)
-async def import_csv(
-    file: UploadFile,
-    db: DBSession,
-    ctx: CurrentMerchantContext,
-) -> list[MerchantContact]:
-    """Accept a CSV with columns: Name, Phone, Last Purchase (order flexible).
 
-    Returns created contacts.  Skips rows missing a Name.
-    """
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="file must be a .csv"
-        )
-    raw = await file.read()
-    try:
-        text = raw.decode("utf-8-sig")  # strip BOM if present
-    except UnicodeDecodeError:
-        text = raw.decode("latin-1")
-
-    reader = csv.DictReader(io.StringIO(text))
-    created: list[MerchantContact] = []
-    for row in reader:
-        # Normalise header names (case-insensitive)
-        normalised = {k.strip().lower(): v.strip() for k, v in row.items() if k}
-        name = normalised.get("name") or normalised.get("full name") or ""
-        if not name:
-            continue
-        phone = normalised.get("phone") or normalised.get("mobile") or None
-        email = normalised.get("email") or None
-        last_purchase = normalised.get("last purchase") or normalised.get("last_purchase") or None
-        contact = MerchantContact(
-            merchant_id=ctx.merchant.id,
-            name=name,
-            phone=phone,
-            email=email,
-            source="csv",
-            last_purchase_note=last_purchase,
-            invite_status="not_invited",
-        )
-        db.add(contact)
-        created.append(contact)
-
-    if not created:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="no valid rows found; expected columns: Name, Phone, Last Purchase",
-        )
-
-    await db.commit()
-    for c in created:
-        await db.refresh(c)
-    return created

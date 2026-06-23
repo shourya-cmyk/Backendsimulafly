@@ -98,3 +98,70 @@ async def test_merged_contacts_and_leads(auth_client, test_user, db_session):
     status_data = r_status.json()
     assert status_data["total"] == 1
     assert status_data["items"][0]["name"] == "Offline Customer"
+
+
+@pytest.mark.asyncio
+async def test_bulk_offer_campaign(auth_client, test_user, db_session):
+    # 1. Create a merchant and member
+    m = Merchant(
+        slug="test-merchant-bulk",
+        legal_name="Bulk Test Merchant",
+        display_name="Bulk Merchant",
+        referral_code="SIMULA-BULK-1",
+    )
+    db_session.add(m)
+    await db_session.commit()
+    await db_session.refresh(m)
+
+    member = MerchantMember(
+        merchant_id=m.id,
+        user_id=test_user.id,
+        role=MemberRole.OWNER.value,
+    )
+    db_session.add(member)
+    await db_session.commit()
+
+    # 2. Create target offline contacts
+    contact1 = MerchantContact(
+        merchant_id=m.id,
+        name="Target Customer 1",
+        phone="+91 99999 11111",
+        source="csv",
+        invite_status="not_invited",
+    )
+    contact2 = MerchantContact(
+        merchant_id=m.id,
+        name="Target Customer 2",
+        phone="+91 99999 22222",
+        source="csv",
+        invite_status="not_invited",
+    )
+    db_session.add_all([contact1, contact2])
+    await db_session.commit()
+    await db_session.refresh(contact1)
+    await db_session.refresh(contact2)
+
+    # 3. Call bulk-offer endpoint
+    payload = {
+        "contact_ids": [str(contact1.id), str(contact2.id)],
+        "products": ["Premium Wooden Chair", "Luxurious Fabric Sofa"],
+        "discount": 25,
+        "max_customers": 100,
+        "max_days": 14,
+        "message": "Hi, claim your 25% discount now!",
+    }
+    headers = {
+        "X-Merchant-Id": str(m.id),
+    }
+    r = await auth_client.post("/api/v1/merchant/contacts/bulk-offer", json=payload, headers=headers)
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert "campaign_id" in data
+    assert data["sent_count"] == 2
+
+    # 4. Check if invite status of contacts was updated in DB
+    contacts_stmt = select(MerchantContact).where(MerchantContact.id.in_([contact1.id, contact2.id]))
+    updated_contacts = (await db_session.execute(contacts_stmt)).scalars().all()
+    assert len(updated_contacts) == 2
+    for c in updated_contacts:
+        assert c.invite_status == "invited"

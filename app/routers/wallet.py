@@ -446,8 +446,8 @@ async def redeem_code(
     )
     db.add(redeemer_ledger)
 
-    # Referrer gets ₹5,000
-    referrer_amount = 5000.0
+    # Referrer gets ₹500
+    referrer_amount = 500.0
     ref_wallet_res = await db.execute(select(Wallet).where(Wallet.merchant_id == referrer.id))
     ref_wallet = ref_wallet_res.scalar_one_or_none()
 

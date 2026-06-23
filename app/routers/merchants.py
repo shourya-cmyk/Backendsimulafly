@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.models.merchant import Merchant, MerchantMember, MemberRole
-from app.models.wallet import Wallet
+from app.models.wallet import Wallet, Transaction, TransactionStatus
 from app.models.user import User
 from app.schemas.merchant import (
     MemberInvite,
@@ -51,11 +51,124 @@ async def _gen_referral_code(db, display_name: str) -> str:
     raise RuntimeError("could not generate unique referral code")
 
 
+async def process_referral_payout(db, merchant: Merchant):
+    from decimal import Decimal
+    import uuid
+
+    if not merchant.referred_by_code or merchant.referral_bonus_paid:
+        return
+
+    # Find referring merchant
+    res = await db.execute(select(Merchant).where(Merchant.referral_code == merchant.referred_by_code))
+    referrer = res.scalar_one_or_none()
+    if not referrer:
+        return
+
+    # Credit referrer
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == referrer.id))
+    ref_wallet = res.scalar_one_or_none()
+    if not ref_wallet:
+        ref_wallet = Wallet(merchant_id=referrer.id, balance=Decimal("0.00"))
+        db.add(ref_wallet)
+        await db.flush()
+    ref_wallet.balance += Decimal("500.00")
+    
+    ref_tx = Transaction(
+        merchant_id=referrer.id,
+        amount=Decimal("500.00"),
+        currency="INR",
+        payment_method="referral",
+        gateway="system",
+        status=TransactionStatus.SUCCESSFUL.value,
+        gateway_ref=f"REF-{uuid.uuid4()}"
+    )
+    db.add(ref_tx)
+
+    # Credit new merchant
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant.id))
+    new_wallet = res.scalar_one_or_none()
+    if not new_wallet:
+        new_wallet = Wallet(merchant_id=merchant.id, balance=Decimal("0.00"))
+        db.add(new_wallet)
+        await db.flush()
+    new_wallet.balance += Decimal("500.00")
+
+    new_tx = Transaction(
+        merchant_id=merchant.id,
+        amount=Decimal("500.00"),
+        currency="INR",
+        payment_method="referral",
+        gateway="system",
+        status=TransactionStatus.SUCCESSFUL.value,
+        gateway_ref=f"REF-{uuid.uuid4()}"
+    )
+    db.add(new_tx)
+
+    # Mark as paid
+    merchant.referral_bonus_paid = True
+    await db.commit()
+    print(f"Processed 500 INR referral payout between new merchant {merchant.id} and referrer {referrer.id}")
+
+
+async def process_kyc_welcome_bonus(db, merchant: Merchant):
+    from decimal import Decimal
+    import uuid
+    from app.models.wallet import Wallet, Transaction, TransactionStatus
+    from app.models.event import LedgerEntry
+
+    if not merchant.is_kyc_completed or merchant.kyc_bonus_paid:
+        return
+
+    # Find or create wallet
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant.id))
+    wallet = res.scalar_one_or_none()
+    if not wallet:
+        wallet = Wallet(merchant_id=merchant.id, balance=Decimal("0.00"))
+        db.add(wallet)
+        await db.flush()
+
+    wallet.balance += Decimal("1000.00")
+    
+    tx = Transaction(
+        merchant_id=merchant.id,
+        amount=Decimal("1000.00"),
+        currency="INR",
+        payment_method="kyc_bonus",
+        gateway="system",
+        status=TransactionStatus.SUCCESSFUL.value,
+        gateway_ref=f"KYC-{uuid.uuid4()}"
+    )
+    db.add(tx)
+
+    ledger = LedgerEntry(
+        merchant_id=merchant.id,
+        wallet_id=wallet.id,
+        entry_type="credit",
+        amount=Decimal("1000.00"),
+        reason="kyc_welcome_bonus",
+        balance_after=wallet.balance,
+        notes="KYC completion welcome bonus"
+    )
+    db.add(ledger)
+
+    merchant.kyc_bonus_paid = True
+    await db.commit()
+    print(f"Processed 1000 INR KYC welcome bonus for merchant {merchant.id}")
+
+
 @router.post("/", response_model=MerchantOut, status_code=status.HTTP_201_CREATED)
 async def create_merchant(
     body: MerchantCreate, user: CurrentUser, db: DBSession
 ) -> Merchant:
     from app.utils.slug import slugify_base
+
+    referred_by_code = None
+    if body.referred_by_code:
+        res = await db.execute(select(Merchant).where(Merchant.referral_code == body.referred_by_code.upper()))
+        referrer = res.scalar_one_or_none()
+        if not referrer:
+            raise HTTPException(status_code=400, detail="Invalid referral code. No such merchant exists.")
+        referred_by_code = body.referred_by_code.upper()
 
     base = slugify_base(body.legal_name)
     res = await db.execute(select(Merchant.slug).where(Merchant.slug.like(f"{base}%")))
@@ -76,6 +189,9 @@ async def create_merchant(
         referral_code=referral,
         latitude=body.latitude,
         longitude=body.longitude,
+        referred_by_code=referred_by_code,
+        is_kyc_completed=False,
+        referral_bonus_paid=False,
     )
     db.add(merchant)
     await db.flush()
@@ -128,9 +244,20 @@ async def update_merchant(
             detail="X-Merchant-Id header must match path merchant_id",
         )
     data = body.model_dump(exclude_unset=True)
+    
+    kyc_transition = False
+    if "is_kyc_completed" in data and data["is_kyc_completed"] is True and not ctx.merchant.is_kyc_completed:
+        kyc_transition = True
+
     for k, v in data.items():
         setattr(ctx.merchant, k, v)
+        
     await db.commit()
+    
+    if kyc_transition:
+        await process_referral_payout(db, ctx.merchant)
+        await process_kyc_welcome_bonus(db, ctx.merchant)
+        
     await db.refresh(ctx.merchant)
     return ctx.merchant
 

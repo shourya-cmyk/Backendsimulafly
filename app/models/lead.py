@@ -30,6 +30,19 @@ class OrderStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class DisputeStatus(str, enum.Enum):
+    NONE = "none"
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class FulfillmentStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    FULFILLED = "fulfilled"
+    CANCELLED = "cancelled"
+
+
 class BuyerLead(Base):
     __tablename__ = "buyer_leads"
     __table_args__ = (
@@ -72,6 +85,8 @@ class BuyerLead(Base):
     delivery_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     merchant_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Stores {parent_reason, child_reason, note} when merchant cancels
+    cancellation_reason: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     converted_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -129,6 +144,22 @@ class Order(Base):
     delivery_address: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     merchant_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    # --- Admin booking operations (additive, nullable/defaulted) ---
+    # Dispute tracking (none|open|resolved)
+    dispute_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=DisputeStatus.NONE.value
+    )
+    dispute_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dispute_resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Fulfillment tracking (pending|in_progress|fulfilled|cancelled)
+    fulfillment_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=FulfillmentStatus.PENDING.value
+    )
+    # Soft-delete marker
+    deleted_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
 

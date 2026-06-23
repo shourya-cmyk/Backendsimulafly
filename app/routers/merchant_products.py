@@ -204,11 +204,6 @@ async def publish_product(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
 
-    if product.status == "archived":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="archived products cannot be published; create a new one",
-        )
 
     # Phase 3: enforce wallet balance ≥ threshold before publishing
     from app.models.wallet import Wallet
