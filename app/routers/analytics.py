@@ -545,23 +545,32 @@ async def analytics_products(
     )
     leads = (await db.execute(leads_stmt)).scalars().all()
 
-    # Fetch Order counts per product (payment_received = confirmed converted orders)
+    # Fetch Order counts per product (payment_received/completed = confirmed converted orders)
     from app.models.lead import Order, OrderStatus
-    orders_stmt = (
-        select(Order.merchant_product_id, func.count(Order.id).label("cnt"))
-        .where(
-            Order.merchant_id == mid,
-            Order.status.in_([
-                OrderStatus.PAYMENT_RECEIVED.value if hasattr(OrderStatus, 'PAYMENT_RECEIVED') else 'payment_received',
-                OrderStatus.CONFIRMED.value if hasattr(OrderStatus, 'CONFIRMED') else 'confirmed',
-            ])
-        )
-        .group_by(Order.merchant_product_id)
+    orders_stmt = select(Order).where(
+        Order.merchant_id == mid,
+        Order.created_at.between(start, end)
     )
+    orders_by_product = {}
+    completed_orders_by_product = {}
     try:
-        orders_by_product = {row[0]: row[1] for row in (await db.execute(orders_stmt)).all()}
-    except Exception:
-        orders_by_product = {}
+        db_orders = (await db.execute(orders_stmt)).scalars().all()
+        for order in db_orders:
+            pids = set()
+            for item in (order.items or []):
+                pid_str = item.get("product_id")
+                if pid_str:
+                    try:
+                        pids.add(uuid.UUID(pid_str))
+                    except ValueError:
+                        pass
+            for pid in pids:
+                if order.status != OrderStatus.CANCELLED.value:
+                    orders_by_product[pid] = orders_by_product.get(pid, 0) + 1
+                if order.status == OrderStatus.COMPLETED.value:
+                    completed_orders_by_product[pid] = completed_orders_by_product.get(pid, 0) + 1
+    except Exception as e:
+        print(f"Error computing order stats for analytics: {e}")
 
     items = []
     for pid, p in products.items():
@@ -578,7 +587,8 @@ async def analytics_products(
         est_roas = (realized_revenue / spend) if spend > 0 else 0.0
 
         orders_count = orders_by_product.get(pid, 0)
-        est_ros = (orders_count / spend) if spend > 0 else 0.0
+        completed_count = completed_orders_by_product.get(pid, 0)
+        est_ros = (completed_count / spend) if spend > 0 else 0.0
 
         # Generate trend message
         if p.status == "paused_insufficient_funds" or p.status == "archived":

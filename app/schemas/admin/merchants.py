@@ -32,6 +32,8 @@ class MerchantListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    partner_id: str | None = None
+    shop_id: str | None = None
     display_name: str
     legal_name: str
     status: str
@@ -78,12 +80,18 @@ class MerchantDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    partner_id: str | None = None
+    shop_id: str | None = None
     slug: str
     display_name: str
     legal_name: str
     status: str
     is_kyc_completed: bool
     country: str
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    range_km: float | None = None
     support_email: str | None = None
     support_phone: str | None = None
     created_at: datetime

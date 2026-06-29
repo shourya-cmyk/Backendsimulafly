@@ -46,3 +46,6 @@ class PermissionsResponse(BaseModel):
     """Effective permission set for the current admin (R2.7)."""
 
     permissions: list[str]
+    full_name: str | None = None
+    email: str | None = None
+

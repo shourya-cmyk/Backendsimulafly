@@ -94,6 +94,7 @@ class MerchantProduct(Base):
         cascade="all, delete-orphan",
         order_by="MerchantProductVariant.position",
     )
+    merchant = relationship("Merchant")
 
 
 class MerchantProductVariant(Base):

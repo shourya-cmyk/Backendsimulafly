@@ -169,6 +169,33 @@ class SupportService:
             body=body,
         )
         self.db.add(message)
+
+        # Notify merchant members if it's a merchant ticket
+        if ticket.requester_type == SupportRequesterType.MERCHANT.value:
+            try:
+                from app.models.merchant import MerchantMember
+                from app.models.notification import Notification
+
+                # Find members of this merchant
+                members_res = await self.db.execute(
+                    select(MerchantMember).where(MerchantMember.merchant_id == ticket.requester_id)
+                )
+                merchant_members = members_res.scalars().all()
+
+                for member in merchant_members:
+                    notif = Notification(
+                        user_id=member.user_id,
+                        kind="system",
+                        title="Support Ticket Updated",
+                        summary=f"Admin replied to your support ticket: '{ticket.subject}'",
+                        payload={"ticket_id": str(ticket.id)}
+                    )
+                    self.db.add(notif)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("app.services.admin.support_service")
+                logger.warning(f"Failed to create merchant support reply notification: {e}")
+
         await self.db.commit()
         # Reload the ticket with the appended message included in history.
         return await self.get_ticket(ticket_id)

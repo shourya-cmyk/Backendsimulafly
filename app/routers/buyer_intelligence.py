@@ -31,7 +31,7 @@ from app.models.lead import BuyerLead
 from app.models.user import User
 from app.models.wallet import Wallet
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext
+from app.utils.merchant_context import CurrentMerchantContext, get_primary_merchant_id
 
 router = APIRouter(prefix="/merchant/buyer-intelligence", tags=["buyer-intelligence"])
 
@@ -272,9 +272,10 @@ async def unlock_shopper(
     score = _intent_score(events)
     unlock_cost = 30 if score >= 81 else 15
 
+    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     # Check wallet balance
     wallet_res = await db.execute(
-        select(Wallet).where(Wallet.merchant_id == ctx.merchant.id)
+        select(Wallet).where(Wallet.merchant_id == primary_id)
     )
     wallet = wallet_res.scalar_one_or_none()
     if not wallet or float(wallet.balance) < unlock_cost:
@@ -287,7 +288,7 @@ async def unlock_shopper(
     from decimal import Decimal
     wallet.balance = wallet.balance - Decimal(str(unlock_cost))
 
-    # Record unlock
+    # Record unlock (we keep ctx.merchant.id for tracing unlock source)
     access = MerchantBuyerAccess(
         merchant_id=ctx.merchant.id,
         user_id=user_id,
@@ -298,7 +299,7 @@ async def unlock_shopper(
     # Add ledger entry for unlock deduction
     from app.models.event import LedgerEntry
     ledger = LedgerEntry(
-        merchant_id=ctx.merchant.id,
+        merchant_id=primary_id,
         wallet_id=wallet.id,
         entry_type="deduction",
         amount=Decimal(str(-unlock_cost)),

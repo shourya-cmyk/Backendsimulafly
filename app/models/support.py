@@ -47,6 +47,22 @@ class SupportTicket(Base):
     )
     sla_due_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
+    # ── Structured merchant ticket metadata ────────────────────────────────────
+    # reason / sub_reason store the parent/child category slugs from the taxonomy.
+    reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sub_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Optional reference to a specific merchant product (SET NULL on product delete).
+    merchant_product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("merchant_products.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # URL of the attached screenshot / image (stored via upload endpoint).
+    attachment_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Free-text description submitted by the merchant.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
@@ -60,6 +76,10 @@ class SupportTicket(Base):
         back_populates="ticket",
         cascade="all, delete-orphan",
         order_by="SupportMessage.created_at",
+    )
+    merchant_product = relationship(
+        "MerchantProduct",
+        foreign_keys=[merchant_product_id],
     )
 
 

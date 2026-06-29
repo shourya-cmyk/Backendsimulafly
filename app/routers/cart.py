@@ -52,9 +52,39 @@ async def get_cart(user: CurrentUser, db: DBSession) -> CartSummary:
 @router.post("/", response_model=CartSummary, status_code=status.HTTP_201_CREATED)
 async def add_to_cart(body: CartItemAdd, user: CurrentUser, db: DBSession) -> CartSummary:
     # body.product_id is the merchant_product_id from the frontend
-    product = await db.get(MerchantProduct, body.product_id)
+    stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.merchant))
+        .where(MerchantProduct.id == body.product_id)
+    )
+    product = (await db.execute(stmt)).scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
+
+    # Check range restriction
+    if user.latitude is not None and user.longitude is not None and product.merchant:
+        m = product.merchant
+        if m.latitude is not None and m.longitude is not None and m.range_km is not None:
+            import math
+            def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+                R = 6371.0  # Earth's radius in km
+                dlat = math.radians(lat2 - lat1)
+                dlon = math.radians(lon2 - lon1)
+                a = (
+                    math.sin(dlat / 2) ** 2
+                    + math.cos(math.radians(lat1))
+                    * math.cos(math.radians(lat2))
+                    * math.sin(dlon / 2) ** 2
+                )
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                return R * c
+
+            dist = calculate_distance(user.latitude, user.longitude, m.latitude, m.longitude)
+            if dist > m.range_km:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This shop does not serve your location."
+                )
 
     existing = await db.execute(
         select(CartItem).where(

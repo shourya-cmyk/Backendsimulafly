@@ -106,6 +106,7 @@ class MerchantProductCreate(BaseModel):
     has_simulafly_listing: bool = False
     in_app_price: float | None = Field(default=None, ge=0)
     in_app_stock: int | None = Field(default=None, ge=0)
+    shop_ids: list[uuid.UUID] | None = None
 
 
 class MerchantProductUpdate(BaseModel):

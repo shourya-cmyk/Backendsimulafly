@@ -31,12 +31,44 @@ async def submit_lead(
     user: CurrentUser,
     db: DBSession,
 ):
-    product = await db.get(MerchantProduct, body.merchant_product_id)
+    stmt = (
+        select(MerchantProduct)
+        .options(selectinload(MerchantProduct.merchant))
+        .where(MerchantProduct.id == body.merchant_product_id)
+    )
+    product = (await db.execute(stmt)).scalar_one_or_none()
     if not product or product.status != "published":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="product not found or unavailable",
         )
+
+    # Check range restriction
+    lat = body.delivery_latitude if body.delivery_latitude is not None else user.latitude
+    lon = body.delivery_longitude if body.delivery_longitude is not None else user.longitude
+    if lat is not None and lon is not None and product.merchant:
+        m = product.merchant
+        if m.latitude is not None and m.longitude is not None and m.range_km is not None:
+            import math
+            def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+                R = 6371.0  # Earth's radius in km
+                dlat = math.radians(lat2 - lat1)
+                dlon = math.radians(lon2 - lon1)
+                a = (
+                    math.sin(dlat / 2) ** 2
+                    + math.cos(math.radians(lat1))
+                    * math.cos(math.radians(lat2))
+                    * math.sin(dlon / 2) ** 2
+                )
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                return R * c
+
+            dist = calculate_distance(lat, lon, m.latitude, m.longitude)
+            if dist > m.range_km:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This shop does not serve your location."
+                )
 
     # Count AI interactions for this buyer+product (best-effort)
     count_res = await db.execute(
@@ -115,6 +147,31 @@ async def submit_lead(
     await db.commit()
     await db.refresh(lead)
     await db.refresh(order)
+
+    # Notify merchant members about the new lead
+    try:
+        from app.models.merchant import MerchantMember
+        from app.models.notification import Notification
+
+        members_res = await db.execute(
+            select(MerchantMember).where(MerchantMember.merchant_id == product.merchant_id)
+        )
+        merchant_members = members_res.scalars().all()
+
+        for member in merchant_members:
+            notif = Notification(
+                user_id=member.user_id,
+                kind="system",
+                title="New Lead Received",
+                summary=f"A new direct purchase lead has been received for product: {product.title}",
+                payload={"lead_id": str(lead.id), "merchant_id": str(product.merchant_id)}
+            )
+            db.add(notif)
+        await db.commit()
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("app.routers.buyer_leads")
+        logger.warning(f"Failed to create merchant notifications: {e}")
 
     return BuyerLeadOut(
         id=lead.id,

@@ -67,12 +67,18 @@ def _to_detail(merchant: Merchant, wallet: Wallet | None) -> MerchantDetail:
     ]
     return MerchantDetail(
         id=merchant.id,
+        partner_id=merchant.partner_id,
+        shop_id=merchant.shop_id,
         slug=merchant.slug,
         display_name=merchant.display_name,
         legal_name=merchant.legal_name,
         status=merchant.status,
         is_kyc_completed=merchant.is_kyc_completed,
         country=merchant.country,
+        address=merchant.address,
+        latitude=merchant.latitude,
+        longitude=merchant.longitude,
+        range_km=merchant.range_km,
         support_email=merchant.support_email,
         support_phone=merchant.support_phone,
         created_at=merchant.created_at,
@@ -97,6 +103,15 @@ async def list_merchants(
     is_kyc_completed: bool | None = Query(
         default=None, description="Filter by KYC completion"
     ),
+    partner_id: str | None = Query(
+        default=None, description="Filter by partner id (all shops of one partner)"
+    ),
+    owner_user_id: uuid.UUID | None = Query(
+        default=None, description="Filter to every shop owned by this user"
+    ),
+    primary_only: bool = Query(
+        default=False, description="Collapse to one row per partner (primary shop)"
+    ),
 ) -> ListingEnvelope[MerchantListItem]:
     """Paginated, searchable, filterable merchant directory (R8.1, R8.2, R8.3)."""
     page_obj = await MerchantDirectoryService(db).list_merchants(
@@ -106,6 +121,9 @@ async def list_merchants(
         sort=sort,
         status_filter=status,
         is_kyc_completed=is_kyc_completed,
+        partner_id=partner_id,
+        owner_user_id=owner_user_id,
+        primary_only=primary_only,
     )
     return ListingEnvelope[MerchantListItem](
         items=[MerchantListItem.model_validate(m) for m in page_obj.items],
