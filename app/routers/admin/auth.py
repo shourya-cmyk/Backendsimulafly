@@ -77,4 +77,8 @@ async def my_permissions(
     roles (the Super Admin wildcard ``*`` is reported verbatim).
     """
     effective = await AdminRBACService(db).load_effective_permissions(admin.id)
-    return PermissionsResponse(permissions=sorted(effective))
+    return PermissionsResponse(
+        permissions=sorted(effective),
+        full_name=admin.full_name,
+        email=admin.email,
+    )

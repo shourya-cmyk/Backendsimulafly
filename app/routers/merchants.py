@@ -20,6 +20,7 @@ from app.utils.merchant_context import (
     CurrentMerchantContext,
     MerchantContext,
     require_role,
+    get_primary_merchant_id,
 )
 from app.utils.slug import make_unique_slug
 
@@ -51,6 +52,41 @@ async def _gen_referral_code(db, display_name: str) -> str:
     raise RuntimeError("could not generate unique referral code")
 
 
+async def _gen_partner_id(db) -> str:
+    """Generate a unique Merchant Partner ID of form mXXXXXXX (e.g. m1234567)."""
+    import random
+    import string
+
+    for _ in range(20):
+        digits = "".join(random.choices(string.digits, k=7))
+        candidate = f"m{digits}"
+        res = await db.execute(select(Merchant.id).where(Merchant.partner_id == candidate))
+        if res.scalar_one_or_none() is None:
+            return candidate
+    raise RuntimeError("could not generate unique partner_id")
+
+
+async def _gen_shop_id(db) -> str:
+    """Generate a unique Shop ID of form SXXX (e.g. S123)."""
+    import random
+    import string
+
+    for _ in range(50):
+        digits = "".join(random.choices(string.digits, k=3))
+        candidate = f"S{digits}"
+        res = await db.execute(select(Merchant.id).where(Merchant.shop_id == candidate))
+        if res.scalar_one_or_none() is None:
+            return candidate
+    # Fallback: use 4 digits if 3-digit space is exhausted
+    for _ in range(50):
+        digits = "".join(random.choices(string.digits, k=4))
+        candidate = f"S{digits}"
+        res = await db.execute(select(Merchant.id).where(Merchant.shop_id == candidate))
+        if res.scalar_one_or_none() is None:
+            return candidate
+    raise RuntimeError("could not generate unique shop_id")
+
+
 async def process_referral_payout(db, merchant: Merchant):
     from decimal import Decimal
     import uuid
@@ -65,16 +101,17 @@ async def process_referral_payout(db, merchant: Merchant):
         return
 
     # Credit referrer
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == referrer.id))
+    primary_referrer_id = await get_primary_merchant_id(db, referrer.id)
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_referrer_id))
     ref_wallet = res.scalar_one_or_none()
     if not ref_wallet:
-        ref_wallet = Wallet(merchant_id=referrer.id, balance=Decimal("0.00"))
+        ref_wallet = Wallet(merchant_id=primary_referrer_id, balance=Decimal("0.00"))
         db.add(ref_wallet)
         await db.flush()
     ref_wallet.balance += Decimal("500.00")
     
     ref_tx = Transaction(
-        merchant_id=referrer.id,
+        merchant_id=primary_referrer_id,
         amount=Decimal("500.00"),
         currency="INR",
         payment_method="referral",
@@ -85,16 +122,17 @@ async def process_referral_payout(db, merchant: Merchant):
     db.add(ref_tx)
 
     # Credit new merchant
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant.id))
+    primary_merchant_id = await get_primary_merchant_id(db, merchant.id)
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_merchant_id))
     new_wallet = res.scalar_one_or_none()
     if not new_wallet:
-        new_wallet = Wallet(merchant_id=merchant.id, balance=Decimal("0.00"))
+        new_wallet = Wallet(merchant_id=primary_merchant_id, balance=Decimal("0.00"))
         db.add(new_wallet)
         await db.flush()
     new_wallet.balance += Decimal("500.00")
 
     new_tx = Transaction(
-        merchant_id=merchant.id,
+        merchant_id=primary_merchant_id,
         amount=Decimal("500.00"),
         currency="INR",
         payment_method="referral",
@@ -119,18 +157,19 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
     if not merchant.is_kyc_completed or merchant.kyc_bonus_paid:
         return
 
-    # Find or create wallet
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant.id))
+    # Find or create wallet for primary merchant
+    primary_merchant_id = await get_primary_merchant_id(db, merchant.id)
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_merchant_id))
     wallet = res.scalar_one_or_none()
     if not wallet:
-        wallet = Wallet(merchant_id=merchant.id, balance=Decimal("0.00"))
+        wallet = Wallet(merchant_id=primary_merchant_id, balance=Decimal("0.00"))
         db.add(wallet)
         await db.flush()
 
     wallet.balance += Decimal("1000.00")
     
     tx = Transaction(
-        merchant_id=merchant.id,
+        merchant_id=primary_merchant_id,
         amount=Decimal("1000.00"),
         currency="INR",
         payment_method="kyc_bonus",
@@ -141,7 +180,7 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
     db.add(tx)
 
     ledger = LedgerEntry(
-        merchant_id=merchant.id,
+        merchant_id=primary_merchant_id,
         wallet_id=wallet.id,
         entry_type="credit",
         amount=Decimal("1000.00"),
@@ -176,22 +215,61 @@ async def create_merchant(
     slug = make_unique_slug(body.legal_name, lambda s: s in existing_slugs)
 
     referral = await _gen_referral_code(db, body.display_name)
+    shop_id = await _gen_shop_id(db)
+
+    # Fetch existing shops owned by this user (oldest first = the "primary").
+    existing_merchants_res = await db.execute(
+        select(Merchant)
+        .join(MerchantMember, MerchantMember.merchant_id == Merchant.id)
+        .where(MerchantMember.user_id == user.id, MerchantMember.role == MemberRole.OWNER.value)
+        .order_by(Merchant.created_at.asc())
+    )
+    existing_merchants = existing_merchants_res.scalars().all()
+
+    inherited_settings = {}
+    is_kyc_completed = False
+    kyc_bonus_paid = False
+    primary_m = existing_merchants[0] if existing_merchants else None
+
+    if primary_m is not None:
+        inherited_settings = primary_m.settings.copy() if primary_m.settings else {}
+        is_kyc_completed = primary_m.is_kyc_completed
+        kyc_bonus_paid = primary_m.kyc_bonus_paid
+
+    # Partner hierarchy: every shop owned by the same user shares ONE partner_id
+    # (the owner/partner), while each shop keeps its own unique shop_id. Only the
+    # owner's first shop mints a fresh partner_id; later shops inherit it.
+    if primary_m is not None and primary_m.partner_id:
+        partner_id = primary_m.partner_id
+    else:
+        partner_id = await _gen_partner_id(db)
+
+    # Merge body settings if provided
+    final_settings = inherited_settings
+    if body.settings:
+        final_settings.update(body.settings)
 
     merchant = Merchant(
+        partner_id=partner_id,
+        shop_id=shop_id,
         slug=slug,
         legal_name=body.legal_name,
         display_name=body.display_name,
         country=body.country,
-        support_email=body.support_email,
-        support_phone=body.support_phone,
-        logo_url=body.logo_url,
-        settings=body.settings or {},
+        support_email=body.support_email or (primary_m.support_email if existing_merchants else None),
+        support_phone=body.support_phone or (primary_m.support_phone if existing_merchants else None),
+        logo_url=body.logo_url or (primary_m.logo_url if existing_merchants else None),
+        settings=final_settings,
         referral_code=referral,
+        # Location is set once at creation — immutable thereafter
+        address=body.address,
         latitude=body.latitude,
         longitude=body.longitude,
+        range_km=body.range_km,
         referred_by_code=referred_by_code,
-        is_kyc_completed=False,
+        is_kyc_completed=is_kyc_completed,
         referral_bonus_paid=False,
+        kyc_bonus_paid=kyc_bonus_paid,
     )
     db.add(merchant)
     await db.flush()
@@ -244,20 +322,25 @@ async def update_merchant(
             detail="X-Merchant-Id header must match path merchant_id",
         )
     data = body.model_dump(exclude_unset=True)
-    
+
+    # Location fields are immutable after creation — silently remove them if
+    # accidentally sent. Callers should direct merchants to email support for changes.
+    for loc_field in ("address", "latitude", "longitude"):
+        data.pop(loc_field, None)
+
     kyc_transition = False
     if "is_kyc_completed" in data and data["is_kyc_completed"] is True and not ctx.merchant.is_kyc_completed:
         kyc_transition = True
 
     for k, v in data.items():
         setattr(ctx.merchant, k, v)
-        
+
     await db.commit()
-    
+
     if kyc_transition:
         await process_referral_payout(db, ctx.merchant)
         await process_kyc_welcome_bonus(db, ctx.merchant)
-        
+
     await db.refresh(ctx.merchant)
     return ctx.merchant
 
@@ -429,6 +512,15 @@ async def get_nearby_merchants(
                 )
             else:
                 merchant.distance = float("inf")
+
+        # Filter by service range restriction
+        filtered_merchants = []
+        for merchant in merchants:
+            if merchant.range_km is not None and merchant.distance != float("inf"):
+                if merchant.distance > merchant.range_km:
+                    continue
+            filtered_merchants.append(merchant)
+        merchants = filtered_merchants
 
         # Sort by distance
         merchants.sort(key=lambda m: m.distance)

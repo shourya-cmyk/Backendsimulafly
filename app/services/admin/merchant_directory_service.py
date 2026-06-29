@@ -26,7 +26,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -36,13 +36,20 @@ from app.models.wallet import Wallet
 from app.services.admin.listing import ListParams, Page, paginate
 
 #: Whitelisted sortable columns for the merchant directory (R8 / R20.4).
+#: Also used by the listing engine to resolve string *filter* keys to columns,
+#: so any column we filter by (e.g. ``partner_id``) must be listed here.
 _SORTABLE: dict[str, ColumnElement] = {
     "display_name": Merchant.display_name,
     "legal_name": Merchant.legal_name,
     "status": Merchant.status,
     "is_kyc_completed": Merchant.is_kyc_completed,
     "created_at": Merchant.created_at,
+    "partner_id": Merchant.partner_id,
+    "shop_id": Merchant.shop_id,
 }
+
+#: Role string identifying the owning member of a merchant (shop).
+_OWNER_ROLE = "owner"
 
 #: Columns matched (ILIKE OR) by the free-text search term (R8.2).
 _SEARCHABLE: tuple[ColumnElement, ...] = (
@@ -66,13 +73,21 @@ class MerchantDirectoryService:
         sort: str | None = None,
         status_filter: str | None = None,
         is_kyc_completed: bool | None = None,
+        partner_id: str | None = None,
+        owner_user_id: uuid.UUID | None = None,
+        primary_only: bool = False,
     ) -> Page:
         """Return a page of merchants (R8.1, R8.2, R8.3).
 
-        Search matches display name or legal name (R8.2). The ``status_filter``
-        and ``is_kyc_completed`` filters are conjunctive (R8.3). Sorting is
-        restricted to the whitelisted columns; an unsupported field yields
-        HTTP 422 via the shared listing engine.
+        Search matches display name or legal name (R8.2). The ``status_filter``,
+        ``is_kyc_completed``, and ``partner_id`` filters are conjunctive (R8.3).
+        ``owner_user_id`` narrows the listing to every shop owned by a single
+        user (each merchant row is a shop; one owner may run several).
+        ``primary_only`` collapses the listing to ONE row per partner — the
+        oldest (primary) shop of each ``partner_id`` — so the merchant
+        directory shows each partner once instead of repeating its shops.
+        Sorting is restricted to the whitelisted columns; an unsupported field
+        yields HTTP 422 via the shared listing engine.
         """
         params = ListParams(
             page=page,
@@ -82,6 +97,7 @@ class MerchantDirectoryService:
             filters={
                 "status": status_filter,
                 "is_kyc_completed": is_kyc_completed,
+                "partner_id": partner_id,
             },
         )
         # When the caller does not specify a page size, fall back to the
@@ -89,9 +105,32 @@ class MerchantDirectoryService:
         if page_size is None:
             params.page_size = ListParams().page_size
 
+        # Base statement; when filtering by owner we join the owning membership
+        # so we list every shop run by that user (grouping key for shops).
+        base_stmt = select(Merchant)
+        if owner_user_id is not None:
+            base_stmt = base_stmt.join(
+                MerchantMember, MerchantMember.merchant_id == Merchant.id
+            ).where(
+                MerchantMember.user_id == owner_user_id,
+                MerchantMember.role == _OWNER_ROLE,
+            )
+
+        # Collapse to one row per partner: keep only the oldest shop of each
+        # partner group. Shops with no partner_id are their own group (keyed by
+        # id), so they each still appear exactly once.
+        if primary_only:
+            group_expr = func.coalesce(Merchant.partner_id, cast(Merchant.id, String))
+            primary_ids = (
+                select(Merchant.id)
+                .distinct(group_expr)
+                .order_by(group_expr, Merchant.created_at.asc())
+            )
+            base_stmt = base_stmt.where(Merchant.id.in_(primary_ids))
+
         return await paginate(
             self.db,
-            select(Merchant),
+            base_stmt,
             params=params,
             sortable=_SORTABLE,
             searchable=_SEARCHABLE,

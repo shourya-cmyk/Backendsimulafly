@@ -13,7 +13,7 @@ from app.schemas.merchant_product import (
     MerchantProductUpdate,
 )
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext
+from app.utils.merchant_context import CurrentMerchantContext, get_primary_merchant_id
 
 router = APIRouter(prefix="/merchant/products", tags=["merchant-products"])
 
@@ -76,32 +76,66 @@ async def create_product(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant onboarding must be completed before adding products.",
         )
-    product = MerchantProduct(
-        merchant_id=ctx.merchant.id,
-        **body.model_dump(),
+
+    # Resolve all shop IDs user belongs to
+    from app.models.merchant import MerchantMember
+    user_memberships_res = await db.execute(
+        select(MerchantMember.merchant_id).where(MerchantMember.user_id == ctx.member.user_id)
     )
-    db.add(product)
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="a product with that SKU already exists for this merchant",
+    user_shop_ids = set(user_memberships_res.scalars().all())
+
+    target_shop_ids = body.shop_ids if body.shop_ids is not None else [ctx.merchant.id]
+    if not target_shop_ids:
+        target_shop_ids = [ctx.merchant.id]
+
+    # Ensure they are member of all target shops
+    for sid in target_shop_ids:
+        if sid not in user_shop_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"You do not have access to shop ID {sid}"
+            )
+
+    payload = body.model_dump()
+    payload.pop("shop_ids", None)
+
+    main_product = None
+    from app.services.embedding import regenerate_embedding
+
+    for sid in target_shop_ids:
+        product = MerchantProduct(
+            merchant_id=sid,
+            **payload,
         )
+        db.add(product)
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A product with SKU '{body.sku}' already exists in one of the selected shops."
+            )
+        
+        # Schedule embedding regen (non-blocking)
+        background_tasks.add_task(regenerate_embedding, db, product.id)
+
+        if sid == ctx.merchant.id:
+            main_product = product
+
+    await db.commit()
+
+    if not main_product:
+        main_product = product
+
     # Reload eagerly to avoid lazy-load greenlet errors
     stmt = (
         select(MerchantProduct)
         .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
-        .where(MerchantProduct.id == product.id)
+        .where(MerchantProduct.id == main_product.id)
     )
-    product = (await db.execute(stmt)).scalar_one()
-
-    # Schedule embedding regen (non-blocking)
-    from app.services.embedding import regenerate_embedding
-    background_tasks.add_task(regenerate_embedding, db, product.id)
-
-    return product
+    main_product = (await db.execute(stmt)).scalar_one()
+    return main_product
 
 
 @router.get("/{product_id}", response_model=MerchantProductOut)
@@ -207,7 +241,8 @@ async def publish_product(
 
     # Phase 3: enforce wallet balance ≥ threshold before publishing
     from app.models.wallet import Wallet
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == ctx.merchant.id))
+    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_id))
     wallet = res.scalar_one_or_none()
     if not wallet or wallet.balance < wallet.low_balance_threshold:
         raise HTTPException(

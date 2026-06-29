@@ -84,3 +84,25 @@ def require_role(*allowed_roles: str):
         return ctx
 
     return guard
+
+
+async def get_primary_merchant_id(db, merchant_id: uuid.UUID) -> uuid.UUID:
+    # Find the user of this merchant (the owner)
+    owner_res = await db.execute(
+        select(MerchantMember.user_id)
+        .where(MerchantMember.merchant_id == merchant_id, MerchantMember.role == "owner")
+    )
+    user_id = owner_res.scalar_one_or_none()
+    if not user_id:
+        return merchant_id # Fallback
+        
+    # Find all merchants owned by this user, ordered by creation date
+    merchants_res = await db.execute(
+        select(Merchant.id)
+        .join(MerchantMember, MerchantMember.merchant_id == Merchant.id)
+        .where(MerchantMember.user_id == user_id, MerchantMember.role == "owner")
+        .order_by(Merchant.created_at.asc())
+    )
+    primary_id = merchants_res.scalars().first()
+    return primary_id if primary_id else merchant_id
+

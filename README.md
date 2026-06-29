@@ -57,8 +57,9 @@ pip install -r requirements.txt
 alembic upgrade head
 python -m app.services.product_ingestion # needs data/amazon_products.csv + Azure embed key
 
-uvicorn app.main:app --reload --port 8000
+py
 ```
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 For production, run with multiple workers:
 

@@ -25,6 +25,12 @@ class Merchant(Base):
     __tablename__ = "merchants"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Human-readable partner identifier: mXXXXXXX (e.g. m1234567).
+    # Shared across every shop owned by the same partner (NOT unique): it is the
+    # top of the hierarchy partner → shops. The individual shop is shop_id.
+    partner_id: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    # Short shop identifier: SXXX (e.g. S123) — unique per shop.
+    shop_id: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True, index=True)
     slug: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -35,8 +41,11 @@ class Merchant(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=MerchantStatus.ACTIVE.value)
     settings: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     referral_code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    # Location fields — set ONCE at creation, immutable thereafter
+    address: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    range_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_kyc_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     referred_by_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     referral_bonus_paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
