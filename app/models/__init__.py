@@ -32,10 +32,9 @@ from app.models.event import (
 from app.models.merchant import Merchant, MerchantMember, MerchantStatus, MemberRole
 from app.models.merchant_product import (
     MerchantProduct,
-    MerchantProductExternalLink,
     MerchantProductVariant,
     ProductStatus,
-    ExternalLinkPlatform,
+
 )
 from app.models.message import Message
 from app.models.notification import Notification
@@ -108,10 +107,8 @@ __all__ = [
     "MerchantStatus",
     "MemberRole",
     "MerchantProduct",
-    "MerchantProductExternalLink",
     "MerchantProductVariant",
     "ProductStatus",
-    "ExternalLinkPlatform",
     "BuyerEvent",
     "LedgerEntry",
     "BuyerEventDedup",

@@ -42,7 +42,6 @@ _WEIGHTS: dict[str, int] = {
     "click": 1,
     "ai_rag_mention": 2,
     "ai_image_generation": 5,
-    "external_redirect": 8,
     "simulafly_purchase": 15,
 }
 
@@ -120,7 +119,6 @@ async def _aggregate_shoppers(
             COUNT(*) FILTER (WHERE be.event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE be.event_type = 'ai_rag_mention') AS rag_count,
             COUNT(*) FILTER (WHERE be.event_type = 'ai_image_generation') AS image_count,
-            COUNT(*) FILTER (WHERE be.event_type = 'external_redirect') AS redirect_count,
             COUNT(*) AS total_interactions
         FROM buyer_events be
         WHERE be.merchant_id = :mid
@@ -130,8 +128,7 @@ async def _aggregate_shoppers(
         ORDER BY (
             COUNT(*) FILTER (WHERE be.event_type = 'click') * 1 +
             COUNT(*) FILTER (WHERE be.event_type = 'ai_rag_mention') * 2 +
-            COUNT(*) FILTER (WHERE be.event_type = 'ai_image_generation') * 5 +
-            COUNT(*) FILTER (WHERE be.event_type = 'external_redirect') * 8
+            COUNT(*) FILTER (WHERE be.event_type = 'ai_image_generation') * 5
         ) DESC
         """
     )
@@ -193,7 +190,6 @@ async def list_shoppers(
             ("click", r["click_count"]),
             ("ai_rag_mention", r["rag_count"]),
             ("ai_image_generation", r["image_count"]),
-            ("external_redirect", r["redirect_count"]),
         ]
         score = _intent_score(events)
         label, tier = _intent_label(score)
@@ -243,8 +239,7 @@ async def unlock_shopper(
         SELECT
             COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
-            COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
-            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count
+            COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count
         FROM buyer_events
         WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
         """
@@ -255,25 +250,22 @@ async def unlock_shopper(
     click_count = 0
     rag_count = 0
     image_count = 0
-    redirect_count = 0
     if ev_row:
         ev = dict(ev_row._mapping)
         click_count = ev.get("click_count") or 0
         rag_count = ev.get("rag_count") or 0
         image_count = ev.get("image_count") or 0
-        redirect_count = ev.get("redirect_count") or 0
 
     events = [
         ("click", click_count),
         ("ai_rag_mention", rag_count),
         ("ai_image_generation", image_count),
-        ("external_redirect", redirect_count),
     ]
     score = _intent_score(events)
     unlock_cost = 30 if score >= 81 else 15
 
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     # Check wallet balance
+    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     wallet_res = await db.execute(
         select(Wallet).where(Wallet.merchant_id == primary_id)
     )
@@ -299,7 +291,7 @@ async def unlock_shopper(
     # Add ledger entry for unlock deduction
     from app.models.event import LedgerEntry
     ledger = LedgerEntry(
-        merchant_id=primary_id,
+        merchant_id=ctx.merchant.id,
         wallet_id=wallet.id,
         entry_type="deduction",
         amount=Decimal(str(-unlock_cost)),
@@ -341,7 +333,6 @@ async def unlock_shopper(
             COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
-            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count,
             COUNT(*) AS total_interactions
         FROM buyer_events
         WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
@@ -353,7 +344,6 @@ async def unlock_shopper(
         ("click", ev["click_count"]),
         ("ai_rag_mention", ev["rag_count"]),
         ("ai_image_generation", ev["image_count"]),
-        ("external_redirect", ev["redirect_count"]),
     ]
     score = _intent_score(events)
     label, tier = _intent_label(score)
@@ -450,7 +440,6 @@ async def shopper_detail(
             COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
-            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count,
             COUNT(*) AS total_interactions
         FROM buyer_events
         WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
@@ -462,7 +451,6 @@ async def shopper_detail(
         ("click", ev["click_count"]),
         ("ai_rag_mention", ev["rag_count"]),
         ("ai_image_generation", ev["image_count"]),
-        ("external_redirect", ev["redirect_count"]),
     ]
     score = _intent_score(events)
     label, tier = _intent_label(score)
@@ -540,10 +528,7 @@ async def shopper_detail(
             t = "room"
             icon = "🛋️"
             text_label = "Generated a room preview"
-        elif event.event_type == "external_redirect":
-            t = "cart"
-            icon = "🛒"
-            text_label = "Redirected to store/cart"
+
         
         title = product_titles.get(event.merchant_product_id)
         if title:

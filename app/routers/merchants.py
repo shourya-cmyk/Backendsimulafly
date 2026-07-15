@@ -100,7 +100,7 @@ async def process_referral_payout(db, merchant: Merchant):
     if not referrer:
         return
 
-    # Credit referrer
+    # Credit referrer (credit primary/global wallet)
     primary_referrer_id = await get_primary_merchant_id(db, referrer.id)
     res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_referrer_id))
     ref_wallet = res.scalar_one_or_none()
@@ -111,7 +111,7 @@ async def process_referral_payout(db, merchant: Merchant):
     ref_wallet.balance += Decimal("500.00")
     
     ref_tx = Transaction(
-        merchant_id=primary_referrer_id,
+        merchant_id=referrer.id,
         amount=Decimal("500.00"),
         currency="INR",
         payment_method="referral",
@@ -121,7 +121,7 @@ async def process_referral_payout(db, merchant: Merchant):
     )
     db.add(ref_tx)
 
-    # Credit new merchant
+    # Credit new merchant (credit primary/global wallet)
     primary_merchant_id = await get_primary_merchant_id(db, merchant.id)
     res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_merchant_id))
     new_wallet = res.scalar_one_or_none()
@@ -132,7 +132,7 @@ async def process_referral_payout(db, merchant: Merchant):
     new_wallet.balance += Decimal("500.00")
 
     new_tx = Transaction(
-        merchant_id=primary_merchant_id,
+        merchant_id=merchant.id,
         amount=Decimal("500.00"),
         currency="INR",
         payment_method="referral",
@@ -157,7 +157,7 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
     if not merchant.is_kyc_completed or merchant.kyc_bonus_paid:
         return
 
-    # Find or create wallet for primary merchant
+    # Find or create wallet for merchant (use primary/global wallet)
     primary_merchant_id = await get_primary_merchant_id(db, merchant.id)
     res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_merchant_id))
     wallet = res.scalar_one_or_none()
@@ -169,7 +169,7 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
     wallet.balance += Decimal("1000.00")
     
     tx = Transaction(
-        merchant_id=primary_merchant_id,
+        merchant_id=merchant.id,
         amount=Decimal("1000.00"),
         currency="INR",
         payment_method="kyc_bonus",
@@ -180,7 +180,7 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
     db.add(tx)
 
     ledger = LedgerEntry(
-        merchant_id=primary_merchant_id,
+        merchant_id=merchant.id,
         wallet_id=wallet.id,
         entry_type="credit",
         amount=Decimal("1000.00"),
@@ -343,6 +343,26 @@ async def update_merchant(
 
     await db.refresh(ctx.merchant)
     return ctx.merchant
+
+
+@router.get("/{merchant_id}/referrals", response_model=list[MerchantOut])
+async def get_referred_merchants(
+    merchant_id: uuid.UUID,
+    db: DBSession,
+    ctx: CurrentMerchantContext
+) -> list[Merchant]:
+    """Fetch all merchants referred by this merchant."""
+    if ctx.merchant.id != merchant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Merchant-Id header must match path merchant_id",
+        )
+    res = await db.execute(
+        select(Merchant)
+        .where(Merchant.referred_by_code == ctx.merchant.referral_code)
+        .order_by(Merchant.created_at.desc())
+    )
+    return list(res.scalars().all())
 
 
 def _member_to_out(member: MerchantMember, user: User) -> dict:
@@ -581,7 +601,7 @@ async def get_public_merchant_products(
 
     p_stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.merchant_id == m_id,
             MerchantProduct.status == "published",

@@ -13,6 +13,8 @@ from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.core.logging import get_logger
+from app.models.merchant import MerchantMember
+from app.models.notification import Notification
 from app.models.wallet import Transaction, Wallet
 from app.models.webhook_delivery import WebhookDelivery, WebhookDeliveryStatus
 from app.services.razorpay_client import verify_webhook_signature
@@ -124,6 +126,25 @@ async def razorpay_webhook(request: Request, db: DBSession) -> dict:
             wallet.status = "active"
 
         await db.commit()
+
+        # Fire a notification to all merchant members (best-effort, own session)
+        try:
+            async with SessionLocal() as notif_session:
+                members_res = await notif_session.execute(
+                    select(MerchantMember).where(MerchantMember.merchant_id == txn.merchant_id)
+                )
+                for member in members_res.scalars().all():
+                    notif_session.add(Notification(
+                        user_id=member.user_id,
+                        kind="payment",
+                        title="💰 Payment Received",
+                        summary=f"₹{float(txn.amount):,.2f} has been added to your wallet via {method or 'Razorpay'}.",
+                        payload={"transaction_id": str(txn.id), "amount": float(txn.amount), "gateway_ref": payment_id, "method": method},
+                    ))
+                await notif_session.commit()
+        except Exception as exc:
+            log.warning("razorpay_webhook_notification_failed", error=str(exc))
+
         log.info(
             "razorpay_webhook_credited",
             merchant_id=str(txn.merchant_id),

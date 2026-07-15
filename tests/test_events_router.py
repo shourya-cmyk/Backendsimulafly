@@ -79,60 +79,6 @@ async def test_click_event_unknown_product_returns_404(auth_client):
     assert r.status_code == 404
 
 
-@pytest.mark.asyncio
-async def test_external_redirect_returns_target_url(auth_client, test_user, db_session):
-    from app.models.merchant_product import MerchantProductExternalLink
-
-    m, p = await _seed_merchant_with_funded_wallet_and_product(db_session, test_user, "REDIR-1")
-    link = MerchantProductExternalLink(
-        merchant_product_id=p.id,
-        platform="amazon",
-        url="https://amazon.in/dp/B0XYZ",
-        label="Buy on Amazon",
-    )
-    db_session.add(link)
-    await db_session.commit()
-    await db_session.refresh(link)
-
-    r = await auth_client.post(
-        "/api/v1/events/external-redirect",
-        json={
-            "product_id": str(p.id),
-            "link_id": str(link.id),
-            "session_id": "sess_redir",
-        },
-    )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["target_url"] == "https://amazon.in/dp/B0XYZ"
-    assert body["billed"] is True
-
-
-@pytest.mark.asyncio
-async def test_external_redirect_link_belongs_to_product(auth_client, test_user, db_session):
-    from app.models.merchant_product import MerchantProductExternalLink
-
-    _, p1 = await _seed_merchant_with_funded_wallet_and_product(db_session, test_user, "MIX-A")
-    _, p2 = await _seed_merchant_with_funded_wallet_and_product(db_session, test_user, "MIX-B")
-    link = MerchantProductExternalLink(
-        merchant_product_id=p1.id,
-        platform="amazon",
-        url="https://amazon.in/dp/B0",
-    )
-    db_session.add(link)
-    await db_session.commit()
-    await db_session.refresh(link)
-
-    r = await auth_client.post(
-        "/api/v1/events/external-redirect",
-        json={
-            "product_id": str(p2.id),
-            "link_id": str(link.id),
-            "session_id": "sess",
-        },
-    )
-    assert r.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_impression_batch_records_all_impressions(auth_client, test_user, db_session):

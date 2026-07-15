@@ -5,39 +5,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 ProductStatusLiteral = Literal["draft", "published", "paused_insufficient_funds", "archived"]
-ExternalLinkPlatformLiteral = Literal["amazon", "shopify", "brand_site", "whatsapp", "other"]
-
-
-class ExternalLinkCreate(BaseModel):
-    platform: ExternalLinkPlatformLiteral
-    url: HttpUrl
-    label: str | None = Field(default=None, max_length=120)
-    last_seen_price: float | None = Field(default=None, ge=0)
-    is_primary: bool = False
-    position: int = Field(default=0, ge=0)
-
-
-class ExternalLinkUpdate(BaseModel):
-    platform: ExternalLinkPlatformLiteral | None = None
-    url: HttpUrl | None = None
-    label: str | None = Field(default=None, max_length=120)
-    last_seen_price: float | None = Field(default=None, ge=0)
-    is_primary: bool | None = None
-    position: int | None = Field(default=None, ge=0)
-
-
-class ExternalLinkOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    merchant_product_id: uuid.UUID
-    platform: ExternalLinkPlatformLiteral
-    url: str
-    label: str | None
-    last_seen_price: float | None
-    is_primary: bool
-    position: int
-    created_at: datetime
 
 
 class ProductVariantCreate(BaseModel):
@@ -161,7 +128,7 @@ class MerchantProductOut(BaseModel):
     health_score: str
     health_reason: str | None
 
-    external_links: list[ExternalLinkOut] = []
+
     variants: list[ProductVariantOut] = []
 
     created_at: datetime

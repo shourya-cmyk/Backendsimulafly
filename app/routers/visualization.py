@@ -103,7 +103,30 @@ def _composite_prompt(
 
 def _fallback_prompt_single(product: Product, room_summary: str | None, placement: str | None) -> str:
     meta = product.product_metadata or {}
-    details = [f"{k}: {v}" for k in ("color", "material", "dimensions", "brand") if (v := meta.get(k))]
+    details = []
+    for k in ("color", "material", "dimensions", "brand"):
+        v = meta.get(k)
+        if not v:
+            continue
+        if k == "dimensions" and isinstance(v, dict):
+            unit = v.get("unit") or "cm"
+            w = v.get("width")
+            h = v.get("height")
+            d = v.get("depth")
+            wt = v.get("weight")
+            dim_parts = []
+            if w: dim_parts.append(f"{w}w")
+            if h: dim_parts.append(f"{h}h")
+            if d: dim_parts.append(f"{d}d")
+            dim_str = " x ".join(dim_parts)
+            if dim_str:
+                dim_str = f"{dim_str} {unit}"
+            if wt:
+                dim_str = f"{dim_str}, weight: {wt}kg" if dim_str else f"weight: {wt}kg"
+            if dim_str:
+                details.append(f"dimensions: {dim_str}")
+        else:
+            details.append(f"{k}: {v}")
     detail_line = "; ".join(details) if details else ""
     scene = room_summary or "a warmly lit, tastefully furnished residential interior"
     direction = f" Placement: {placement}." if placement else ""

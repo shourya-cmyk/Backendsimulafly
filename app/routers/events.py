@@ -7,12 +7,10 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
-from app.models.merchant_product import MerchantProduct, MerchantProductExternalLink
+from app.models.merchant_product import MerchantProduct
 from app.schemas.event import (
     BuyerEventOut,
     ClickEventIn,
-    ExternalRedirectIn,
-    ExternalRedirectOut,
     ImpressionBatchIn,
 )
 from app.services.billing import BillingService
@@ -53,40 +51,6 @@ async def record_click(
     background_tasks.add_task(svc.pause_if_depleted_for, product.merchant_id)
     return event
 
-
-@router.post("/external-redirect", response_model=ExternalRedirectOut)
-@limiter.limit("10/minute")
-async def record_external_redirect(
-    body: ExternalRedirectIn,
-    user: CurrentUser,
-    db: DBSession,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    response: Response,
-):
-    product = await db.get(MerchantProduct, body.product_id)
-    if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
-
-    link = await db.get(MerchantProductExternalLink, body.link_id)
-    if not link or link.merchant_product_id != product.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="link not found for product"
-        )
-
-    svc = BillingService(db)
-    event = await svc.record_event(
-        event_type="external_redirect",
-        user_id=user.id,
-        merchant_id=product.merchant_id,
-        product_id=product.id,
-        session_id=body.session_id,
-        context={"link_id": str(link.id), "platform": link.platform, "url": link.url},
-        client_ip=request.client.host if request.client else None,
-    )
-    background_tasks.add_task(svc.pause_if_depleted_for, product.merchant_id)
-
-    return {"target_url": link.url, "billed": event.billed}
 
 
 @router.post("/impression-batch", response_model=_ImpressionBatchResponse)
