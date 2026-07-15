@@ -51,4 +51,4 @@ async def test_dedup_only_applies_to_designated_event_types(db_session):
     assert is_dedupable("ai_image_generation") is True
     assert is_dedupable("impression") is False
     assert is_dedupable("ai_rag_mention") is False
-    assert is_dedupable("external_redirect") is False
+

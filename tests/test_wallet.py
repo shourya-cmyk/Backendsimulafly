@@ -572,68 +572,87 @@ async def test_redeem_promo_code_and_referral_code(auth_client, db_session):
     from sqlalchemy import select
     from app.models.wallet import Wallet
     from app.models.merchant import Merchant
+    from app.models.user import User
+    from app.core.security import hash_password, create_access_token
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
 
-    # Create Merchant A (Redeemer)
+    # Create Merchant A (owned by test_user)
     r1 = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Merchant A", "display_name": "Merchant A"}
     )
     mid_a = r1.json()["id"]
 
-    # Create Merchant B (Referrer)
-    r2 = await auth_client.post(
-        "/api/v1/merchants/", json={"legal_name": "Merchant B", "display_name": "Merchant B"}
+    # Create user_2 for Merchant B
+    user_2 = User(
+        email=f"test-b-{uuid_mod.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("password123"),
+        full_name="Merchant B Owner",
     )
-    mid_b = r2.json()["id"]
-    ref_code_b = r2.json()["referral_code"]
+    db_session.add(user_2)
+    await db_session.commit()
+    await db_session.refresh(user_2)
 
-    # 1. Self redemption should fail
-    r = await auth_client.post(
-        "/api/v1/merchant/wallet/redeem",
-        headers={"X-Merchant-Id": mid_b},
-        json={"code": ref_code_b},
-    )
-    assert r.status_code == 400
-    assert "own referral code" in r.json()["detail"]
+    # Create auth_client_2 for user_2
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as auth_client_2:
+        token_2 = create_access_token(str(user_2.id))
+        auth_client_2.headers.update({"Authorization": f"Bearer {token_2}"})
 
-    # 2. Valid promo code redemption for Merchant A
-    r = await auth_client.post(
-        "/api/v1/merchant/wallet/redeem",
-        headers={"X-Merchant-Id": mid_a},
-        json={"code": "WELCOME500"},
-    )
-    assert r.status_code == 200
-    assert r.json()["credit_amount"] == 500.0
-    assert r.json()["balance"] == 500.0
+        # Create Merchant B (Referrer)
+        r2 = await auth_client_2.post(
+            "/api/v1/merchants/", json={"legal_name": "Merchant B", "display_name": "Merchant B"}
+        )
+        mid_b = r2.json()["id"]
+        ref_code_b = r2.json()["referral_code"]
 
-    # 3. Double redemption of promo code should fail
-    r = await auth_client.post(
-        "/api/v1/merchant/wallet/redeem",
-        headers={"X-Merchant-Id": mid_a},
-        json={"code": "SIMULA1000"},
-    )
-    assert r.status_code == 400
-    assert "already redeemed" in r.json()["detail"]
+        # 1. Self redemption should fail
+        r = await auth_client_2.post(
+            "/api/v1/merchant/wallet/redeem",
+            headers={"X-Merchant-Id": mid_b},
+            json={"code": ref_code_b},
+        )
+        assert r.status_code == 400
+        assert "own referral code" in r.json()["detail"]
 
-    # 4. Merchant B redeems Merchant A's referral code (should succeed since Merchant B hasn't redeemed anything yet)
-    ref_code_a = r1.json()["referral_code"]
-    r = await auth_client.post(
-        "/api/v1/merchant/wallet/redeem",
-        headers={"X-Merchant-Id": mid_b},
-        json={"code": ref_code_a},
-    )
-    assert r.status_code == 200
-    assert r.json()["credit_amount"] == 500.0
+        # 2. Valid promo code redemption for Merchant A
+        r = await auth_client.post(
+            "/api/v1/merchant/wallet/redeem",
+            headers={"X-Merchant-Id": mid_a},
+            json={"code": "WELCOME500"},
+        )
+        assert r.status_code == 200
+        assert r.json()["credit_amount"] == 500.0
+        assert r.json()["balance"] == 500.0
 
-    # Verify wallet balances
-    # Redeemer (Merchant B) gets +500
-    res_b = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_b)))
-    wallet_b = res_b.scalar_one()
-    assert float(wallet_b.balance) == 500.0
+        # 3. Double redemption of promo code should fail
+        r = await auth_client.post(
+            "/api/v1/merchant/wallet/redeem",
+            headers={"X-Merchant-Id": mid_a},
+            json={"code": "SIMULA1000"},
+        )
+        assert r.status_code == 400
+        assert "already redeemed" in r.json()["detail"]
 
-    # Referrer (Merchant A) gets +500
-    res_a = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_a)))
-    wallet_a = res_a.scalar_one()
-    # Initial balance: 500 (from WELCOME500) + 500 (from Referral partner bonus) = 1000
-    assert float(wallet_a.balance) == 1000.0
+        # 4. Merchant B redeems Merchant A's referral code
+        ref_code_a = r1.json()["referral_code"]
+        r = await auth_client_2.post(
+            "/api/v1/merchant/wallet/redeem",
+            headers={"X-Merchant-Id": mid_b},
+            json={"code": ref_code_a},
+        )
+        assert r.status_code == 200
+        assert r.json()["credit_amount"] == 500.0
+
+        # Verify wallet balances
+        # Redeemer (Merchant B) gets +500
+        res_b = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_b)))
+        wallet_b = res_b.scalar_one()
+        assert float(wallet_b.balance) == 500.0
+
+        # Referrer (Merchant A) gets +500
+        res_a = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid_a)))
+        wallet_a = res_a.scalar_one()
+        # Initial balance: 500 (from WELCOME500) + 500 (from Referral partner bonus) = 1000
+        assert float(wallet_a.balance) == 1000.0
 
 

@@ -21,7 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.event import BuyerEvent, BuyerEventDedup, LedgerEntry
+from app.models.merchant import MerchantMember
 from app.models.merchant_product import MerchantProduct
+from app.models.notification import Notification
 from app.models.wallet import Wallet
 from app.services.dedup import _current_hour_bucket, is_dedupable
 from app.services.pricing import resolve_rate
@@ -168,6 +170,24 @@ class BillingService:
             .values(status="paused_insufficient_funds")
         )
         await self.db.commit()
+
+        # Notify all merchant members about depletion
+        try:
+            members_res = await self.db.execute(
+                select(MerchantMember).where(MerchantMember.merchant_id == merchant_id)
+            )
+            for member in members_res.scalars().all():
+                self.db.add(Notification(
+                    user_id=member.user_id,
+                    kind="wallet",
+                    title="⚠️ Wallet Depleted — Products Paused",
+                    summary="Your wallet balance has reached ₹0. All your products have been paused. Please top up to resume visibility.",
+                    payload={"merchant_id": str(merchant_id), "action": "paused"},
+                ))
+            await self.db.commit()
+        except Exception:
+            pass  # Non-critical
+
         log.info("billing_pause_depleted", merchant_id=str(merchant_id))
 
     async def pause_if_depleted_all(self) -> int:

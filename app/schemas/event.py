@@ -9,7 +9,6 @@ EventTypeLiteral = Literal[
     "ai_rag_mention",
     "click",
     "ai_image_generation",
-    "external_redirect",
 ]
 
 LedgerEntryTypeLiteral = Literal["deduction", "credit", "refund", "adjustment"]
@@ -28,17 +27,6 @@ class ImpressionBatchIn(BaseModel):
     product_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
 
 
-class ExternalRedirectIn(BaseModel):
-    product_id: uuid.UUID
-    link_id: uuid.UUID
-    session_id: str = Field(min_length=1, max_length=120)
-
-
-# ── Outgoing event payloads ────────────────────────────────────────────────
-
-class ExternalRedirectOut(BaseModel):
-    target_url: str
-    billed: bool
 
 
 class BuyerEventOut(BaseModel):

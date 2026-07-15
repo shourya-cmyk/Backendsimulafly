@@ -135,16 +135,3 @@ def test_impression_batch_in_caps_size():
         ImpressionBatchIn(session_id="sess", product_ids=["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"] * 101)
 
 
-def test_external_redirect_in_validates():
-    from app.schemas.event import ExternalRedirectIn
-    from pydantic import ValidationError
-
-    valid = ExternalRedirectIn(
-        product_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-        link_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        session_id="sess",
-    )
-    assert valid.session_id == "sess"
-
-    with pytest.raises(ValidationError):
-        ExternalRedirectIn(product_id="x", link_id="y", session_id="z")

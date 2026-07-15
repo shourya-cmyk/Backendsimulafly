@@ -26,7 +26,7 @@ class EventType(str, enum.Enum):
     AI_RAG_MENTION = "ai_rag_mention"
     CLICK = "click"
     AI_IMAGE_GENERATION = "ai_image_generation"
-    EXTERNAL_REDIRECT = "external_redirect"
+
 
 
 class LedgerEntryType(str, enum.Enum):

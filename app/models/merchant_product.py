@@ -27,13 +27,6 @@ class ProductStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
-class ExternalLinkPlatform(str, enum.Enum):
-    AMAZON = "amazon"
-    SHOPIFY = "shopify"
-    BRAND_SITE = "brand_site"
-    WHATSAPP = "whatsapp"
-    OTHER = "other"
-
 
 class MerchantProduct(Base):
     __tablename__ = "merchant_products"
@@ -82,12 +75,6 @@ class MerchantProduct(Base):
         server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    external_links = relationship(
-        "MerchantProductExternalLink",
-        back_populates="merchant_product",
-        cascade="all, delete-orphan",
-        order_by="MerchantProductExternalLink.position",
-    )
     variants = relationship(
         "MerchantProductVariant",
         back_populates="merchant_product",
@@ -129,25 +116,3 @@ class MerchantProductVariant(Base):
 
     merchant_product = relationship("MerchantProduct", back_populates="variants")
 
-
-class MerchantProductExternalLink(Base):
-    __tablename__ = "merchant_product_external_links"
-    __table_args__ = (
-        Index("ix_merchant_product_external_links_product", "merchant_product_id"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    merchant_product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("merchant_products.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    platform: Mapped[str] = mapped_column(String(32), nullable=False)
-    url: Mapped[str] = mapped_column(Text, nullable=False)
-    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    last_seen_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
-    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
-
-    merchant_product = relationship("MerchantProduct", back_populates="external_links")

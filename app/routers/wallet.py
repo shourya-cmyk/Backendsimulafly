@@ -7,7 +7,8 @@ from sqlalchemy import func, select, or_, and_
 from app.models.wallet import Transaction, Wallet
 from app.models.event import LedgerEntry, BuyerEvent
 from app.models.merchant_product import MerchantProduct
-from app.models.merchant import Merchant
+from app.models.merchant import Merchant, MerchantMember
+from app.models.notification import Notification
 from app.schemas.wallet import (
     PaginatedTransactions,
     TransactionOut,
@@ -19,6 +20,28 @@ from app.schemas.wallet import (
 )
 from app.utils.dependencies import DBSession
 from app.utils.merchant_context import CurrentMerchantContext, get_primary_merchant_id
+
+
+async def _notify_merchant_members(
+    db,
+    merchant_id: uuid.UUID,
+    kind: str,
+    title: str,
+    summary: str,
+    payload: dict,
+) -> None:
+    """Create a Notification row for every member of the merchant."""
+    members_res = await db.execute(
+        select(MerchantMember).where(MerchantMember.merchant_id == merchant_id)
+    )
+    for member in members_res.scalars().all():
+        db.add(Notification(
+            user_id=member.user_id,
+            kind=kind,
+            title=title,
+            summary=summary,
+            payload=payload,
+        ))
 
 router = APIRouter(prefix="/merchant/wallet", tags=["merchant-wallet"])
 
@@ -46,17 +69,16 @@ async def list_transactions(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     count_stmt = (
         select(func.count())
         .select_from(Transaction)
-        .where(Transaction.merchant_id == primary_id)
+        .where(Transaction.merchant_id == ctx.merchant.id)
     )
     total = (await db.execute(count_stmt)).scalar_one()
 
     stmt = (
         select(Transaction)
-        .where(Transaction.merchant_id == primary_id)
+        .where(Transaction.merchant_id == ctx.merchant.id)
         .order_by(Transaction.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -100,10 +122,9 @@ def _get_razorpay_key_id() -> str:
 async def topup_intent(
     body: TopupIntentRequest, db: DBSession, ctx: CurrentMerchantContext
 ) -> dict:
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     # Create a pending Transaction first so we have an id for the receipt
     txn = Transaction(
-        merchant_id=primary_id,
+        merchant_id=ctx.merchant.id,
         amount=Decimal(str(body.amount)),
         currency=body.currency,
         status="pending",
@@ -142,11 +163,10 @@ async def topup_confirm(
             status_code=status.HTTP_400_BAD_REQUEST, detail="invalid signature"
         )
 
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     res = await db.execute(
         select(Transaction).where(
             Transaction.razorpay_order_id == body.order_id,
-            Transaction.merchant_id == primary_id,
+            Transaction.merchant_id == ctx.merchant.id,
         )
     )
     txn = res.scalar_one_or_none()
@@ -175,6 +195,21 @@ async def topup_confirm(
         wallet.status = "active"
 
     await db.commit()
+
+    # Notify all merchant members about successful payment
+    try:
+        await _notify_merchant_members(
+            db,
+            merchant_id=ctx.merchant.id,
+            kind="payment",
+            title="💰 Payment Received",
+            summary=f"₹{float(txn.amount):,.2f} has been added to your wallet successfully.",
+            payload={"transaction_id": str(txn.id), "amount": float(txn.amount), "gateway_ref": body.payment_id},
+        )
+        await db.commit()
+    except Exception:
+        pass  # Non-critical — don't fail the topup
+
     await db.refresh(wallet)
     return wallet
 
@@ -202,6 +237,21 @@ async def topup_bypass(
         wallet.status = "active"
 
     await db.commit()
+
+    # Notify all merchant members about successful payment (bypass/dev)
+    try:
+        await _notify_merchant_members(
+            db,
+            merchant_id=ctx.merchant.id,
+            kind="payment",
+            title="💰 Payment Received",
+            summary=f"₹{float(txn.amount):,.2f} has been added to your wallet successfully.",
+            payload={"transaction_id": str(txn.id), "amount": float(txn.amount)},
+        )
+        await db.commit()
+    except Exception:
+        pass  # Non-critical
+
     await db.refresh(wallet)
     return wallet
 
@@ -215,8 +265,7 @@ async def get_balance_history(
     time_window: str = Query(default="all_time"),
     event_filter: str = Query(default="all"),
 ) -> dict:
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
-    wallet = await _get_wallet_or_404(db, primary_id)
+    wallet = await _get_wallet_or_404(db, ctx.merchant.id)
     current_balance = float(wallet.balance)
 
     # 1. Resolve date range filter
@@ -233,7 +282,7 @@ async def get_balance_history(
     txs = []
     if event_filter in ("all", "topups"):
         tx_stmt = select(Transaction).where(
-            Transaction.merchant_id == primary_id,
+            Transaction.merchant_id == ctx.merchant.id,
             Transaction.status == "successful"
         )
         if start_date:
@@ -254,7 +303,7 @@ async def get_balance_history(
             )
             .outerjoin(BuyerEvent, LedgerEntry.related_event_id == BuyerEvent.id)
             .outerjoin(MerchantProduct, BuyerEvent.merchant_product_id == MerchantProduct.id)
-            .where(LedgerEntry.merchant_id == primary_id)
+            .where(LedgerEntry.merchant_id == ctx.merchant.id)
         )
         if start_date:
             ledg_stmt = ledg_stmt.where(LedgerEntry.created_at >= start_date)
@@ -306,9 +355,8 @@ async def get_balance_history(
             disp_type = "Add to Cart"
         elif be_type == "impression":
             disp_type = "View"
-        elif be_type == "external_redirect":
-            disp_type = "Redirect"
         elif ledg.entry_type == "credit":
+
             disp_type = "Deposit"
         else:
             disp_type = ledg.reason.replace("_", " ").title()
@@ -360,12 +408,11 @@ async def redeem_code(
     db: DBSession,
     ctx: CurrentMerchantContext,
 ) -> dict:
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
-    wallet = await _get_wallet_or_404(db, primary_id)
+    wallet = await _get_wallet_or_404(db, ctx.merchant.id)
     code = body.code.strip().upper()
 
     # Get the redeemer's merchant object
-    redeemer_res = await db.execute(select(Merchant).where(Merchant.id == primary_id))
+    redeemer_res = await db.execute(select(Merchant).where(Merchant.id == ctx.merchant.id))
     redeemer = redeemer_res.scalar_one()
 
     # 1. Prevent self-redemption
@@ -378,7 +425,7 @@ async def redeem_code(
     # 2. Check if redeemer has already redeemed a coupon/promo code
     already_redeemed = await db.execute(
         select(LedgerEntry).where(
-            LedgerEntry.merchant_id == primary_id,
+            LedgerEntry.merchant_id == ctx.merchant.id,
             LedgerEntry.entry_type == "credit",
             or_(
                 LedgerEntry.reason == "referral_redeem",
@@ -408,7 +455,7 @@ async def redeem_code(
         
         # Write ledger credit
         ledger = LedgerEntry(
-            merchant_id=primary_id,
+            merchant_id=ctx.merchant.id,
             wallet_id=wallet.id,
             entry_type="credit",
             amount=Decimal(str(credit_amount)),
@@ -418,8 +465,22 @@ async def redeem_code(
         )
         db.add(ledger)
         await db.commit()
+
+        # Notify merchant members about promo code credit
+        try:
+            await _notify_merchant_members(
+                db,
+                merchant_id=ctx.merchant.id,
+                kind="wallet",
+                title="🎁 Promo Code Applied",
+                summary=f"Promo code {code} applied! ₹{credit_amount:,.2f} credited to your wallet.",
+                payload={"code": code, "credit_amount": credit_amount, "reason": f"promo_{code.lower()}"},
+            )
+            await db.commit()
+        except Exception:
+            pass
+
         await db.refresh(wallet)
-        
         return {
             "message": f"Promo code applied successfully! ₹{credit_amount:,.2f} added to wallet.",
             "balance": float(wallet.balance),
@@ -441,11 +502,8 @@ async def redeem_code(
     redeemer_amount = 500.0
     wallet.balance = wallet.balance + Decimal(str(redeemer_amount))
     
-    # Resolve referrer primary merchant ID to credit their primary wallet
-    primary_referrer_id = await get_primary_merchant_id(db, referrer.id)
-
     redeemer_ledger = LedgerEntry(
-        merchant_id=primary_id,
+        merchant_id=ctx.merchant.id,
         wallet_id=wallet.id,
         entry_type="credit",
         amount=Decimal(str(redeemer_amount)),
@@ -457,13 +515,14 @@ async def redeem_code(
 
     # Referrer gets ₹500
     referrer_amount = 500.0
+    primary_referrer_id = await get_primary_merchant_id(db, referrer.id)
     ref_wallet_res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_referrer_id))
     ref_wallet = ref_wallet_res.scalar_one_or_none()
 
     if ref_wallet:
         ref_wallet.balance = ref_wallet.balance + Decimal(str(referrer_amount))
         referrer_ledger = LedgerEntry(
-            merchant_id=primary_referrer_id,
+            merchant_id=referrer.id,
             wallet_id=ref_wallet.id,
             entry_type="credit",
             amount=Decimal(str(referrer_amount)),
@@ -474,8 +533,37 @@ async def redeem_code(
         db.add(referrer_ledger)
 
     await db.commit()
-    await db.refresh(wallet)
 
+    # Notify redeemer
+    try:
+        await _notify_merchant_members(
+            db,
+            merchant_id=ctx.merchant.id,
+            kind="wallet",
+            title="🤝 Referral Code Applied",
+            summary=f"Referral code accepted! ₹{redeemer_amount:,.2f} credited to your wallet.",
+            payload={"code": code, "credit_amount": redeemer_amount, "reason": "referral_redeem"},
+        )
+        await db.commit()
+    except Exception:
+        pass
+
+    # Notify referrer about the bonus they earned
+    if ref_wallet:
+        try:
+            await _notify_merchant_members(
+                db,
+                merchant_id=referrer.id,
+                kind="wallet",
+                title="🎉 Referral Bonus Earned!",
+                summary=f"{redeemer.display_name} used your referral code! ₹{referrer_amount:,.2f} has been credited to your wallet.",
+                payload={"referral_code": code, "credit_amount": referrer_amount, "redeemer": redeemer.display_name, "reason": "referral_partner"},
+            )
+            await db.commit()
+        except Exception:
+            pass
+
+    await db.refresh(wallet)
     return {
         "message": f"Referral code accepted! ₹{redeemer_amount:,.2f} credited to your wallet, and ₹{referrer_amount:,.2f} to {referrer.display_name}.",
         "balance": float(wallet.balance),

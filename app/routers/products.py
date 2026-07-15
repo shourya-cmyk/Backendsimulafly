@@ -50,7 +50,6 @@ async def search(
     rows = await db.execute(
         select(MerchantProduct)
         .options(
-            selectinload(MerchantProduct.external_links),
             selectinload(MerchantProduct.variants),
             selectinload(MerchantProduct.merchant),
         )
@@ -86,7 +85,6 @@ async def list_products(
     stmt = (
         select(MerchantProduct)
         .options(
-            selectinload(MerchantProduct.external_links),
             selectinload(MerchantProduct.variants),
             selectinload(MerchantProduct.merchant),
         )
@@ -118,7 +116,6 @@ async def get_product(product_id: uuid.UUID, user: CurrentUser, db: DBSession):
     stmt = (
         select(MerchantProduct)
         .options(
-            selectinload(MerchantProduct.external_links),
             selectinload(MerchantProduct.variants),
             selectinload(MerchantProduct.merchant),
         )

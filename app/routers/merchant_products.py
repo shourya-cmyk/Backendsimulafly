@@ -55,7 +55,7 @@ async def list_products(
     total = total_res.scalar_one()
 
     base = (
-        base.options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        base.options(selectinload(MerchantProduct.variants))
         .order_by(MerchantProduct.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -131,7 +131,7 @@ async def create_product(
     # Reload eagerly to avoid lazy-load greenlet errors
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id == main_product.id)
     )
     main_product = (await db.execute(stmt)).scalar_one()
@@ -144,7 +144,7 @@ async def get_product(
 ) -> MerchantProduct:
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.merchant_id == ctx.merchant.id,
@@ -174,7 +174,7 @@ async def update_product(
 ) -> MerchantProduct:
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.merchant_id == ctx.merchant.id,
@@ -199,7 +199,7 @@ async def update_product(
     # Re-fetch with eager-loaded relations to avoid MissingGreenlet on serialization.
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id == product_id)
     )
     product = (await db.execute(stmt)).scalar_one()
@@ -228,7 +228,7 @@ async def publish_product(
 ) -> MerchantProduct:
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.merchant_id == ctx.merchant.id,
@@ -256,18 +256,15 @@ async def publish_product(
     # Re-fetch for serialization
     stmt = (
         select(MerchantProduct)
-        .options(selectinload(MerchantProduct.external_links), selectinload(MerchantProduct.variants))
+        .options(selectinload(MerchantProduct.variants))
         .where(MerchantProduct.id == product_id)
     )
     product = (await db.execute(stmt)).scalar_one()
     return product
 
 
-from app.models.merchant_product import MerchantProductExternalLink, MerchantProductVariant
+from app.models.merchant_product import MerchantProductVariant
 from app.schemas.merchant_product import (
-    ExternalLinkCreate,
-    ExternalLinkOut,
-    ExternalLinkUpdate,
     ProductVariantCreate,
     ProductVariantOut,
     ProductVariantUpdate,
@@ -284,71 +281,7 @@ async def _product_owned(
     return p
 
 
-@router.post(
-    "/{product_id}/external-links/",
-    response_model=ExternalLinkOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def add_external_link(
-    product_id: uuid.UUID,
-    body: ExternalLinkCreate,
-    db: DBSession,
-    ctx: CurrentMerchantContext,
-) -> MerchantProductExternalLink:
-    await _product_owned(db, product_id, ctx.merchant.id)
 
-    link = MerchantProductExternalLink(
-        merchant_product_id=product_id,
-        **body.model_dump(mode="json"),
-    )
-    db.add(link)
-    await db.commit()
-    await db.refresh(link)
-    return link
-
-
-@router.patch(
-    "/{product_id}/external-links/{link_id}",
-    response_model=ExternalLinkOut,
-)
-async def update_external_link(
-    product_id: uuid.UUID,
-    link_id: uuid.UUID,
-    body: ExternalLinkUpdate,
-    db: DBSession,
-    ctx: CurrentMerchantContext,
-) -> MerchantProductExternalLink:
-    await _product_owned(db, product_id, ctx.merchant.id)
-
-    link = await db.get(MerchantProductExternalLink, link_id)
-    if not link or link.merchant_product_id != product_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="link not found")
-
-    data = body.model_dump(exclude_unset=True, mode="json")
-    for k, v in data.items():
-        setattr(link, k, v)
-    await db.commit()
-    await db.refresh(link)
-    return link
-
-
-@router.delete(
-    "/{product_id}/external-links/{link_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_external_link(
-    product_id: uuid.UUID,
-    link_id: uuid.UUID,
-    db: DBSession,
-    ctx: CurrentMerchantContext,
-) -> None:
-    await _product_owned(db, product_id, ctx.merchant.id)
-
-    link = await db.get(MerchantProductExternalLink, link_id)
-    if not link or link.merchant_product_id != product_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="link not found")
-    await db.delete(link)
-    await db.commit()
 
 
 # ─────────────────────────── Variants ────────────────────────────────────────
