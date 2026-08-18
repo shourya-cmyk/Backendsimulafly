@@ -53,8 +53,8 @@ class PaginatedTransactions(BaseModel):
 
 
 class TopupIntentRequest(BaseModel):
-    amount: float = Field(gt=0, le=500_000)
-    currency: str = "INR"
+    amount: float = Field(ge=1, le=500_000)
+    currency: Literal["INR"] = "INR"
 
 
 class TopupIntentResponse(BaseModel):

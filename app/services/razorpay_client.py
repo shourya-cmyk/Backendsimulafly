@@ -39,10 +39,13 @@ def _get_webhook_secret() -> str:
 
 def create_order(amount_inr: float, receipt: str) -> dict:
     """Create a Razorpay order. amount_inr is in rupees; SDK takes paise."""
+    amount_paise = int(round(amount_inr * 100))
+    if amount_paise < 100:
+        raise ValueError("Razorpay orders require at least 100 paise")
     client = _get_razorpay_client()
     return client.order.create(
         data={
-            "amount": int(round(amount_inr * 100)),
+            "amount": amount_paise,
             "currency": "INR",
             "receipt": receipt,
             "payment_capture": 1,

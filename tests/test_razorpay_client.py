@@ -21,6 +21,13 @@ def test_create_order_returns_razorpay_order_id():
     assert payload["receipt"] == "txn_xyz"
 
 
+def test_create_order_rejects_less_than_one_rupee():
+    from app.services import razorpay_client as rc_module
+
+    with pytest.raises(ValueError, match="at least 100 paise"):
+        rc_module.create_order(amount_inr=0.99, receipt="txn_too_small")
+
+
 def test_verify_payment_signature_accepts_valid():
     import hmac
     import hashlib

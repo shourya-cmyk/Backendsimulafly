@@ -107,9 +107,13 @@ def test_topup_intent_request_validates_amount():
     with pytest.raises(ValidationError):
         TopupIntentRequest(amount=0)
     with pytest.raises(ValidationError):
+        TopupIntentRequest(amount=0.99)
+    with pytest.raises(ValidationError):
         TopupIntentRequest(amount=-50)
     with pytest.raises(ValidationError):
         TopupIntentRequest(amount=10_000_000)
+    with pytest.raises(ValidationError):
+        TopupIntentRequest(amount=100, currency="USD")
 
 
 def test_topup_confirm_request_requires_all_fields():
@@ -265,6 +269,57 @@ async def test_topup_intent_creates_pending_transaction(auth_client, db_session)
     txn = res.scalar_one()
     assert txn.status == "pending"
     assert float(txn.amount) == 1000.0
+
+
+@pytest.mark.asyncio
+async def test_topup_intent_maps_provider_auth_failure_to_401(auth_client):
+    from unittest.mock import patch
+
+    class ProviderAuthError(Exception):
+        status_code = 401
+
+    response = await auth_client.post(
+        "/api/v1/merchants/",
+        json={"legal_name": "Razorpay Auth Test", "display_name": "RAT"},
+    )
+    merchant_id = response.json()["id"]
+
+    with patch(
+        "app.routers.wallet.create_order",
+        side_effect=ProviderAuthError("provider credentials rejected"),
+    ):
+        response = await auth_client.post(
+            "/api/v1/merchant/wallet/topup/intent",
+            headers={"X-Merchant-Id": merchant_id},
+            json={"amount": 100},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Razorpay API authentication failed"
+
+
+@pytest.mark.asyncio
+async def test_topup_intent_hides_provider_error_details(auth_client):
+    from unittest.mock import patch
+
+    response = await auth_client.post(
+        "/api/v1/merchants/",
+        json={"legal_name": "Razorpay Failure Test", "display_name": "RFT"},
+    )
+    merchant_id = response.json()["id"]
+
+    with patch(
+        "app.routers.wallet.create_order",
+        side_effect=RuntimeError("sensitive provider response"),
+    ):
+        response = await auth_client.post(
+            "/api/v1/merchant/wallet/topup/intent",
+            headers={"X-Merchant-Id": merchant_id},
+            json={"amount": 100},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "could not create Razorpay order"
 
 
 @pytest.mark.asyncio

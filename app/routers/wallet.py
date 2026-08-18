@@ -133,11 +133,23 @@ async def topup_intent(
 
     try:
         order = create_order(amount_inr=body.amount, receipt=f"txn_{txn.id}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        if getattr(exc, "status_code", None) == 401:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Razorpay API authentication failed",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="could not create Razorpay order",
+        ) from exc
+
+    if not order.get("id"):
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"could not create Razorpay order: {e}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Razorpay returned an invalid order",
         )
 
     txn.razorpay_order_id = order["id"]
@@ -166,7 +178,7 @@ async def topup_confirm(
         select(Transaction).where(
             Transaction.razorpay_order_id == body.order_id,
             Transaction.merchant_id == ctx.merchant.id,
-        )
+        ).with_for_update()
     )
     txn = res.scalar_one_or_none()
     if not txn:
@@ -208,48 +220,6 @@ async def topup_confirm(
         await db.commit()
     except Exception:
         pass  # Non-critical — don't fail the topup
-
-    await db.refresh(wallet)
-    return wallet
-
-
-@router.post("/topup/bypass", response_model=WalletOut)
-async def topup_bypass(
-    body: TopupIntentRequest, db: DBSession, ctx: CurrentMerchantContext
-) -> Wallet:
-    """Simulate a successful topup without any payment gateway for development/testing."""
-    txn = Transaction(
-        merchant_id=ctx.merchant.id,
-        amount=Decimal(str(body.amount)),
-        currency=body.currency,
-        status="successful",
-        payment_method="wallet",
-        gateway="bypass_test",
-        gateway_ref=f"bypass_{uuid.uuid4()}",
-    )
-    db.add(txn)
-
-    wallet = await _get_wallet_or_404(db, ctx.merchant.id)
-    wallet.balance = wallet.balance + txn.amount
-    wallet.last_recharged_at = datetime.now(timezone.utc)
-    if wallet.status == "depleted":
-        wallet.status = "active"
-
-    await db.commit()
-
-    # Notify all merchant members about successful payment (bypass/dev)
-    try:
-        await _notify_merchant_members(
-            db,
-            merchant_id=ctx.merchant.id,
-            kind="payment",
-            title="💰 Payment Received",
-            summary=f"₹{float(txn.amount):,.2f} has been added to your wallet successfully.",
-            payload={"transaction_id": str(txn.id), "amount": float(txn.amount)},
-        )
-        await db.commit()
-    except Exception:
-        pass  # Non-critical
 
     await db.refresh(wallet)
     return wallet
