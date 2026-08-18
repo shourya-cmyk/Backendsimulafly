@@ -29,6 +29,8 @@ class BuyerLeadCreate(BaseModel):
     delivery_pincode: str | None = Field(default=None, max_length=20)
     delivery_latitude: float | None = None
     delivery_longitude: float | None = None
+    coupon_code: str | None = Field(default=None, max_length=50)
+    discount_amount: Decimal | None = None
     items: list[OrderItemIn] = Field(default_factory=list)
 
 

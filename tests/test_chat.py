@@ -39,7 +39,15 @@ def _stub_chat_llm(monkeypatch):
 def stub_run_rag_turn(monkeypatch, db_session):
     """Stubs the whole LangGraph turn so chat tests focus on router + DB wiring."""
 
-    async def _fake(db, *, session_id, user_message, context_summary, design_profile):
+    async def _fake(
+        db,
+        *,
+        session_id,
+        user_message,
+        context_summary,
+        design_profile,
+        image_data_url=None,
+    ):
         # echo a product carousel when the user mentions 'sofa', otherwise plain text
         products: list = []
         if "sofa" in user_message.lower():
@@ -54,6 +62,14 @@ def stub_run_rag_turn(monkeypatch, db_session):
             preview_product_id=None,
             preview_product_ids=None,
             shopping_intent=bool(products),
+            image_generation_prompt=(
+                user_message if "generate an image" in user_message.lower() else None
+            ),
+            suggested_questions=[
+                "Tell me more",
+                "Show me an example",
+                "What should I ask next?",
+            ],
         )
 
     from app.routers import chat as chat_router
@@ -128,8 +144,36 @@ async def test_chat_turn_without_catalog_match_returns_text_only(
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["ui_payload"] is None
+    assert body["ui_payload"]["type"] == "suggestions"
+    assert len(body["ui_payload"]["suggestions"]) == 3
     assert "minimalism" in body["content"].lower() or body["content"].startswith("Great")
+
+
+@pytest.mark.asyncio
+async def test_chat_image_request_starts_job_in_same_session(
+    auth_client, stub_run_rag_turn, monkeypatch
+):
+    from app.routers import chat as chat_router
+
+    async def _no_op_worker(**kwargs):
+        return None
+
+    monkeypatch.setattr(chat_router, "_run_prompt_image_generation", _no_op_worker)
+
+    created = await auth_client.post(
+        "/api/v1/sessions/", json={"title": "Image chat"}
+    )
+    sid = created.json()["id"]
+    response = await auth_client.post(
+        "/api/v1/chat/",
+        json={"session_id": sid, "content": "Generate an image of a moonlit garden"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["image_task_id"] is not None
+
+    messages = await auth_client.get(f"/api/v1/chat/{sid}/messages")
+    assert [message["role"] for message in messages.json()] == ["user", "assistant"]
 
 
 def test_strip_directives_extracts_preview():
@@ -142,6 +186,23 @@ def test_strip_directives_extracts_preview():
     assert "PRODUCTS_JSON" not in cleaned
     assert "PREVIEW_REQUEST" not in cleaned
     assert preview is not None
+
+
+def test_extracts_suggested_questions():
+    text, suggestions = rag_service._extract_suggestions(
+        'Answer text.\nSUGGESTIONS_JSON: ["First?", "Second?", "Third?"]'
+    )
+    assert text == "Answer text."
+    assert suggestions == ["First?", "Second?", "Third?"]
+
+
+def test_image_intent_fallback_is_conservative():
+    assert rag_service._heuristic_image_intent(
+        "Generate an image of a moonlit garden"
+    )
+    assert not rag_service._heuristic_image_intent(
+        "What does this image show?"
+    )
 
 
 def test_graph_builds():

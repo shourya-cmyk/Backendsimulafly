@@ -25,12 +25,12 @@ class Merchant(Base):
     __tablename__ = "merchants"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # Human-readable partner identifier: mXXXXXXX (e.g. m1234567).
+    # Human-readable partner identifier: MPUID (e.g. SIM-M-MH-000142-M).
     # Shared across every shop owned by the same partner (NOT unique): it is the
     # top of the hierarchy partner → shops. The individual shop is shop_id.
-    partner_id: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
-    # Short shop identifier: SXXX (e.g. S123) — unique per shop.
-    shop_id: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True, index=True)
+    partner_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # Human-readable shop identifier: MPSUID (e.g. SIM-S-000142-01-M) — unique per shop.
+    shop_id: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True, index=True)
     slug: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)

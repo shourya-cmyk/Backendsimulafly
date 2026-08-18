@@ -23,7 +23,7 @@ async def create_job(
     user_id: uuid.UUID,
     session_id: uuid.UUID,
     product_id: uuid.UUID | None,   # None for composite renders
-    room_image_id: uuid.UUID,
+    room_image_id: uuid.UUID | None,
 ) -> VisualizeJob:
     job = VisualizeJob(
         id=uuid.uuid4(),

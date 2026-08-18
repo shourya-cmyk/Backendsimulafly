@@ -265,9 +265,8 @@ async def unlock_shopper(
     unlock_cost = 30 if score >= 81 else 15
 
     # Check wallet balance
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
     wallet_res = await db.execute(
-        select(Wallet).where(Wallet.merchant_id == primary_id)
+        select(Wallet).where(Wallet.merchant_id == ctx.merchant.id)
     )
     wallet = wallet_res.scalar_one_or_none()
     if not wallet or float(wallet.balance) < unlock_cost:

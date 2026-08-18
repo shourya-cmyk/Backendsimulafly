@@ -19,8 +19,11 @@ class VisualizeJob(Base):
         UUID(as_uuid=True), ForeignKey("design_sessions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    room_image_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("room_images.id", ondelete="CASCADE"), nullable=False
+    # General text-to-image requests do not have a source room image. Keeping
+    # them in the same durable job table lets the mobile client use one polling
+    # path for room visualizations and freely generated images.
+    room_image_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("room_images.id", ondelete="CASCADE"), nullable=True
     )
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     image_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -2,9 +2,25 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ProductStatusLiteral = Literal["draft", "published", "paused_insufficient_funds", "archived"]
+MAX_PRODUCT_IMAGES = 5
+
+
+def _validate_additional_images(images: list[str] | None) -> list[str] | None:
+    if images is None:
+        return None
+    if len(images) > MAX_PRODUCT_IMAGES - 1:
+        raise ValueError("a product can have at most 5 images total")
+    cleaned = [image.strip() for image in images]
+    if any(not image for image in cleaned):
+        raise ValueError("image URLs cannot be empty")
+    if any(len(image) > 2048 for image in cleaned):
+        raise ValueError("image URL must be at most 2048 characters")
+    if len(set(cleaned)) != len(cleaned):
+        raise ValueError("product image URLs must be unique")
+    return cleaned
 
 
 class ProductVariantCreate(BaseModel):
@@ -64,6 +80,19 @@ class MerchantProductCreate(BaseModel):
     primary_image_url: str | None = Field(default=None, max_length=2048)
     additional_images: list[str] = Field(default_factory=list)
 
+    @field_validator("additional_images")
+    @classmethod
+    def validate_additional_images(cls, images: list[str]) -> list[str]:
+        return _validate_additional_images(images) or []
+
+    @model_validator(mode="after")
+    def validate_ordered_gallery(self):
+        if self.additional_images and not self.primary_image_url:
+            raise ValueError("primary_image_url is required when additional images are provided")
+        if self.primary_image_url and self.primary_image_url in self.additional_images:
+            raise ValueError("product image URLs must be unique")
+        return self
+
     dimensions: dict = Field(default_factory=dict)
     materials: dict = Field(default_factory=dict)
     colors: dict = Field(default_factory=dict)
@@ -86,6 +115,11 @@ class MerchantProductUpdate(BaseModel):
 
     primary_image_url: str | None = Field(default=None, max_length=2048)
     additional_images: list[str] | None = None
+
+    @field_validator("additional_images")
+    @classmethod
+    def validate_additional_images(cls, images: list[str] | None) -> list[str] | None:
+        return _validate_additional_images(images)
 
     dimensions: dict | None = None
     materials: dict | None = None

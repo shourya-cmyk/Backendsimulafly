@@ -15,6 +15,7 @@ class SessionCreate(BaseModel):
 class SessionUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     status: SessionStatus | None = None
+    room_image_id: uuid.UUID | None = None
 
 
 class SessionOut(BaseModel):

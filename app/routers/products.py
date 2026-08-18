@@ -127,15 +127,4 @@ async def get_product(product_id: uuid.UUID, user: CurrentUser, db: DBSession):
     product = (await db.execute(stmt)).scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
-
-    # Check range restriction
-    if user.latitude is not None and user.longitude is not None and product.merchant:
-        m = product.merchant
-        if m.latitude is not None and m.longitude is not None and m.range_km is not None:
-            dist = calculate_distance(user.latitude, user.longitude, m.latitude, m.longitude)
-            if dist > m.range_km:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="This shop does not serve your location."
-                )
     return product

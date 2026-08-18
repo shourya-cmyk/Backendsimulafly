@@ -12,6 +12,7 @@ from app.schemas.merchant import (
     MerchantCreate,
     MerchantMemberOut,
     MerchantOut,
+    MerchantPublicOut,
     MerchantUpdate,
 )
 from app.schemas.merchant_product import MerchantProductOut
@@ -23,6 +24,15 @@ from app.utils.merchant_context import (
     get_primary_merchant_id,
 )
 from app.utils.slug import make_unique_slug
+
+from app.utils.id_generator import (
+    generate_mpuid,
+    generate_mpsuid,
+    validate_mpuid,
+    validate_mpsuid,
+    parse_mpuid,
+    parse_mpsuid,
+)
 
 router = APIRouter(prefix="/merchants", tags=["merchants"])
 
@@ -52,39 +62,14 @@ async def _gen_referral_code(db, display_name: str) -> str:
     raise RuntimeError("could not generate unique referral code")
 
 
-async def _gen_partner_id(db) -> str:
-    """Generate a unique Merchant Partner ID of form mXXXXXXX (e.g. m1234567)."""
-    import random
-    import string
-
-    for _ in range(20):
-        digits = "".join(random.choices(string.digits, k=7))
-        candidate = f"m{digits}"
-        res = await db.execute(select(Merchant.id).where(Merchant.partner_id == candidate))
-        if res.scalar_one_or_none() is None:
-            return candidate
-    raise RuntimeError("could not generate unique partner_id")
+async def _gen_partner_id(db, state_code: str = "DL", city_code: str = "N") -> str:
+    """Generate a unique Merchant Partner ID (MPUID) of form SIM-M-{STATE}-{SEQUENCE}-{CITY_CODE}."""
+    return await generate_mpuid(db, state_code=state_code, city_code=city_code)
 
 
-async def _gen_shop_id(db) -> str:
-    """Generate a unique Shop ID of form SXXX (e.g. S123)."""
-    import random
-    import string
-
-    for _ in range(50):
-        digits = "".join(random.choices(string.digits, k=3))
-        candidate = f"S{digits}"
-        res = await db.execute(select(Merchant.id).where(Merchant.shop_id == candidate))
-        if res.scalar_one_or_none() is None:
-            return candidate
-    # Fallback: use 4 digits if 3-digit space is exhausted
-    for _ in range(50):
-        digits = "".join(random.choices(string.digits, k=4))
-        candidate = f"S{digits}"
-        res = await db.execute(select(Merchant.id).where(Merchant.shop_id == candidate))
-        if res.scalar_one_or_none() is None:
-            return candidate
-    raise RuntimeError("could not generate unique shop_id")
+async def _gen_shop_id(db, partner_id: str | None = None, city_code: str = "N") -> str:
+    """Generate a unique Shop ID (MPSUID) of form SIM-S-{MERCHANT_SEQUENCE}-{SHOP_SEQUENCE}-{CITY_CODE}."""
+    return await generate_mpsuid(db, partner_id=partner_id, city_code=city_code)
 
 
 async def process_referral_payout(db, merchant: Merchant):
@@ -100,12 +85,11 @@ async def process_referral_payout(db, merchant: Merchant):
     if not referrer:
         return
 
-    # Credit referrer (credit primary/global wallet)
-    primary_referrer_id = await get_primary_merchant_id(db, referrer.id)
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_referrer_id))
+    # Credit referrer wallet
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == referrer.id))
     ref_wallet = res.scalar_one_or_none()
     if not ref_wallet:
-        ref_wallet = Wallet(merchant_id=primary_referrer_id, balance=Decimal("0.00"))
+        ref_wallet = Wallet(merchant_id=referrer.id, balance=Decimal("0.00"))
         db.add(ref_wallet)
         await db.flush()
     ref_wallet.balance += Decimal("500.00")
@@ -121,12 +105,11 @@ async def process_referral_payout(db, merchant: Merchant):
     )
     db.add(ref_tx)
 
-    # Credit new merchant (credit primary/global wallet)
-    primary_merchant_id = await get_primary_merchant_id(db, merchant.id)
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_merchant_id))
+    # Credit new merchant wallet
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant.id))
     new_wallet = res.scalar_one_or_none()
     if not new_wallet:
-        new_wallet = Wallet(merchant_id=primary_merchant_id, balance=Decimal("0.00"))
+        new_wallet = Wallet(merchant_id=merchant.id, balance=Decimal("0.00"))
         db.add(new_wallet)
         await db.flush()
     new_wallet.balance += Decimal("500.00")
@@ -157,12 +140,11 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
     if not merchant.is_kyc_completed or merchant.kyc_bonus_paid:
         return
 
-    # Find or create wallet for merchant (use primary/global wallet)
-    primary_merchant_id = await get_primary_merchant_id(db, merchant.id)
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_merchant_id))
+    # Find or create wallet for specific merchant/store
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant.id))
     wallet = res.scalar_one_or_none()
     if not wallet:
-        wallet = Wallet(merchant_id=primary_merchant_id, balance=Decimal("0.00"))
+        wallet = Wallet(merchant_id=merchant.id, balance=Decimal("0.00"))
         db.add(wallet)
         await db.flush()
 
@@ -215,7 +197,6 @@ async def create_merchant(
     slug = make_unique_slug(body.legal_name, lambda s: s in existing_slugs)
 
     referral = await _gen_referral_code(db, body.display_name)
-    shop_id = await _gen_shop_id(db)
 
     # Fetch existing shops owned by this user (oldest first = the "primary").
     existing_merchants_res = await db.execute(
@@ -227,13 +208,11 @@ async def create_merchant(
     existing_merchants = existing_merchants_res.scalars().all()
 
     inherited_settings = {}
-    is_kyc_completed = False
     kyc_bonus_paid = False
     primary_m = existing_merchants[0] if existing_merchants else None
 
     if primary_m is not None:
         inherited_settings = primary_m.settings.copy() if primary_m.settings else {}
-        is_kyc_completed = primary_m.is_kyc_completed
         kyc_bonus_paid = primary_m.kyc_bonus_paid
 
     # Partner hierarchy: every shop owned by the same user shares ONE partner_id
@@ -242,12 +221,35 @@ async def create_merchant(
     if primary_m is not None and primary_m.partner_id:
         partner_id = primary_m.partner_id
     else:
-        partner_id = await _gen_partner_id(db)
+        partner_id = await _gen_partner_id(
+            db, state_code=body.state_code or "DL", city_code=body.city_code or "N"
+        )
 
-    # Merge body settings if provided
+    shop_id = await _gen_shop_id(
+        db, partner_id=partner_id, city_code=body.city_code or "N"
+    )
+
+    # These values are written only by the validated onboarding/approval routes.
+    protected_settings = {
+        "onboarding_submission",
+        "onboarding_checks",
+        "agreement_acceptance",
+        "approval_status",
+        "approved_at",
+    }
+    # Never inherit completion from the owner's primary shop. Legacy clients
+    # may still send this product-setup flag for the newly created shop, but it
+    # cannot grant approval without the protected submission/check records.
+    inherited_settings.pop("onboarding_completed", None)
+    for key in protected_settings:
+        inherited_settings.pop(key, None)
+
+    # Merge body settings if provided, excluding server-controlled state.
     final_settings = inherited_settings
     if body.settings:
-        final_settings.update(body.settings)
+        final_settings.update(
+            {key: value for key, value in body.settings.items() if key not in protected_settings}
+        )
 
     merchant = Merchant(
         partner_id=partner_id,
@@ -267,7 +269,9 @@ async def create_merchant(
         longitude=body.longitude,
         range_km=body.range_km,
         referred_by_code=referred_by_code,
-        is_kyc_completed=is_kyc_completed,
+        # PAN verification is account-level, but every shop must verify its
+        # own GSTIN before the combined KYC flag becomes true.
+        is_kyc_completed=False,
         referral_bonus_paid=False,
         kyc_bonus_paid=kyc_bonus_paid,
     )
@@ -299,6 +303,22 @@ async def list_my_merchants(user: CurrentUser, db: DBSession) -> list[Merchant]:
     return list(res.scalars().all())
 
 
+@router.get("/validate-id")
+async def validate_id(id_string: str) -> dict:
+    """Pre-flight validation for MPUID (SIM-M-STATE-SEQ-CITY) or MPSUID (SIM-S-MSEQ-SSEQ-CITY)."""
+    is_mpuid = validate_mpuid(id_string)
+    is_mpsuid = validate_mpsuid(id_string)
+    parsed_mpuid = parse_mpuid(id_string) if is_mpuid else None
+    parsed_mpsuid = parse_mpsuid(id_string) if is_mpsuid else None
+
+    return {
+        "id": id_string,
+        "is_valid": is_mpuid or is_mpsuid,
+        "type": "MPUID" if is_mpuid else ("MPSUID" if is_mpsuid else "unknown"),
+        "parsed": parsed_mpuid or parsed_mpsuid,
+    }
+
+
 @router.get("/{merchant_id}", response_model=MerchantOut)
 async def get_merchant(merchant_id: uuid.UUID, ctx: CurrentMerchantContext) -> Merchant:
     if ctx.merchant.id != merchant_id:
@@ -323,23 +343,33 @@ async def update_merchant(
         )
     data = body.model_dump(exclude_unset=True)
 
+    if "settings" in data:
+        protected_settings = {
+            "onboarding_submission",
+            "onboarding_checks",
+            "onboarding_completed",
+            "agreement_acceptance",
+            "approval_status",
+            "approved_at",
+        }
+        incoming = dict(data["settings"] or {})
+        current = ctx.merchant.settings or {}
+        for key in protected_settings:
+            if key in current:
+                incoming[key] = current[key]
+            else:
+                incoming.pop(key, None)
+        data["settings"] = incoming
+
     # Location fields are immutable after creation — silently remove them if
     # accidentally sent. Callers should direct merchants to email support for changes.
     for loc_field in ("address", "latitude", "longitude"):
         data.pop(loc_field, None)
 
-    kyc_transition = False
-    if "is_kyc_completed" in data and data["is_kyc_completed"] is True and not ctx.merchant.is_kyc_completed:
-        kyc_transition = True
-
     for k, v in data.items():
         setattr(ctx.merchant, k, v)
 
     await db.commit()
-
-    if kyc_transition:
-        await process_referral_payout(db, ctx.merchant)
-        await process_kyc_welcome_bonus(db, ctx.merchant)
 
     await db.refresh(ctx.merchant)
     return ctx.merchant
@@ -489,7 +519,7 @@ async def remove_member(
     await db.commit()
 
 
-@router.get("/public/nearby", response_model=list[MerchantOut])
+@router.get("/public/nearby", response_model=list[MerchantPublicOut])
 async def get_nearby_merchants(
     db: DBSession,
     lat: float | None = None,
@@ -527,23 +557,19 @@ async def get_nearby_merchants(
         # Attach calculated distance to each merchant object
         for merchant in merchants:
             if merchant.latitude is not None and merchant.longitude is not None:
-                merchant.distance = calculate_distance(
-                    lat, lon, merchant.latitude, merchant.longitude
+                merchant.distance = round(
+                    calculate_distance(lat, lon, merchant.latitude, merchant.longitude), 2
                 )
             else:
-                merchant.distance = float("inf")
-
-        # Filter by service range restriction
-        filtered_merchants = []
-        for merchant in merchants:
-            if merchant.range_km is not None and merchant.distance != float("inf"):
-                if merchant.distance > merchant.range_km:
-                    continue
-            filtered_merchants.append(merchant)
-        merchants = filtered_merchants
+                merchant.distance = 999999.0
 
         # Sort by distance
         merchants.sort(key=lambda m: m.distance)
+
+        # Clear fallback distance 999999.0 to None so JSON serialization is valid
+        for merchant in merchants:
+            if merchant.distance == 999999.0:
+                merchant.distance = None
     else:
         # Otherwise sort by newest first (default fallback)
         from datetime import datetime
@@ -554,7 +580,7 @@ async def get_nearby_merchants(
     return merchants[:max(1, min(limit, 50))]
 
 
-@router.get("/public/{lookup_value}", response_model=MerchantOut)
+@router.get("/public/{lookup_value}", response_model=MerchantPublicOut)
 async def get_public_merchant(
     lookup_value: str,
     db: DBSession,
@@ -610,6 +636,3 @@ async def get_public_merchant_products(
     )
     res = await db.execute(p_stmt)
     return list(res.scalars().all())
-
-
-

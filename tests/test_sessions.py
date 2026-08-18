@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 
 
@@ -11,13 +13,28 @@ async def test_session_crud_and_patch(auth_client):
     assert r.status_code == 200
     assert any(s["id"] == sid for s in r.json())
 
+    image = base64.b64encode(
+        b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9"
+    ).decode()
+    upload = await auth_client.post(
+        "/api/v1/upload/room-image",
+        json={"image_base64": image, "media_type": "image/jpeg"},
+    )
+    image_id = upload.json()["id"]
+
     r = await auth_client.patch(
-        f"/api/v1/sessions/{sid}", json={"title": "Renamed", "status": "archived"}
+        f"/api/v1/sessions/{sid}",
+        json={
+            "title": "Renamed",
+            "status": "archived",
+            "room_image_id": image_id,
+        },
     )
     assert r.status_code == 200
     body = r.json()
     assert body["title"] == "Renamed"
     assert body["status"] == "archived"
+    assert body["room_image_id"] == image_id
 
     r = await auth_client.delete(f"/api/v1/sessions/{sid}")
     assert r.status_code == 204

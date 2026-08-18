@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from app.models.event import BuyerEvent
 from app.models.lead import BuyerLead, LeadStatus, LeadType, Order, OrderStatus
@@ -42,33 +43,6 @@ async def submit_lead(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="product not found or unavailable",
         )
-
-    # Check range restriction
-    lat = body.delivery_latitude if body.delivery_latitude is not None else user.latitude
-    lon = body.delivery_longitude if body.delivery_longitude is not None else user.longitude
-    if lat is not None and lon is not None and product.merchant:
-        m = product.merchant
-        if m.latitude is not None and m.longitude is not None and m.range_km is not None:
-            import math
-            def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-                R = 6371.0  # Earth's radius in km
-                dlat = math.radians(lat2 - lat1)
-                dlon = math.radians(lon2 - lon1)
-                a = (
-                    math.sin(dlat / 2) ** 2
-                    + math.cos(math.radians(lat1))
-                    * math.cos(math.radians(lat2))
-                    * math.sin(dlon / 2) ** 2
-                )
-                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-                return R * c
-
-            dist = calculate_distance(lat, lon, m.latitude, m.longitude)
-            if dist > m.range_km:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="This shop does not serve your location."
-                )
 
     # Count AI interactions for this buyer+product (best-effort)
     count_res = await db.execute(
@@ -110,6 +84,9 @@ async def submit_lead(
             }
         ]
         total = Decimal(str(product.in_app_price or 0))
+
+    if body.discount_amount and body.discount_amount > 0:
+        total = max(Decimal("0.0"), total - body.discount_amount)
 
     lead = BuyerLead(
         merchant_id=product.merchant_id,

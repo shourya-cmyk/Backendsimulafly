@@ -47,13 +47,12 @@ router = APIRouter(prefix="/merchant/wallet", tags=["merchant-wallet"])
 
 
 async def _get_wallet_or_404(db, merchant_id: uuid.UUID) -> Wallet:
-    primary_id = await get_primary_merchant_id(db, merchant_id)
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_id))
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == merchant_id))
     wallet = res.scalar_one_or_none()
     if not wallet:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="wallet not found for merchant"
-        )
+        wallet = Wallet(merchant_id=merchant_id, balance=Decimal("0.00"))
+        db.add(wallet)
+        await db.flush()
     return wallet
 
 
@@ -515,9 +514,12 @@ async def redeem_code(
 
     # Referrer gets ₹500
     referrer_amount = 500.0
-    primary_referrer_id = await get_primary_merchant_id(db, referrer.id)
-    ref_wallet_res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_referrer_id))
+    ref_wallet_res = await db.execute(select(Wallet).where(Wallet.merchant_id == referrer.id))
     ref_wallet = ref_wallet_res.scalar_one_or_none()
+    if not ref_wallet:
+        ref_wallet = Wallet(merchant_id=referrer.id, balance=Decimal("0.00"))
+        db.add(ref_wallet)
+        await db.flush()
 
     if ref_wallet:
         ref_wallet.balance = ref_wallet.balance + Decimal(str(referrer_amount))

@@ -62,6 +62,26 @@ def test_merchant_create_validates_required_fields():
     with pytest.raises(ValidationError):
         MerchantCreate(legal_name="Acme")  # missing display_name
 
+    storefront = MerchantCreate(
+        legal_name="Storefront Ltd",
+        display_name="Storefront",
+        settings={
+            "storefront": {
+                "tagline": "Live better, every day.",
+                "hero_image_url": "https://example.com/cover.webp",
+                "featured_categories": ["Living Room", "Bedroom"],
+            }
+        },
+    )
+    assert storefront.settings["storefront"]["tagline"] == "Live better, every day."
+
+    with pytest.raises(ValidationError):
+        MerchantCreate(
+            legal_name="Too Many Ltd",
+            display_name="Too Many",
+            settings={"storefront": {"featured_categories": ["One", "Two", "Three", "Four"]}},
+        )
+
 
 def test_merchant_member_invite_validates_email_and_role():
     from app.schemas.merchant import MemberInvite
@@ -117,6 +137,45 @@ async def test_onboarding_handles_slug_collision(auth_client, test_user, db_sess
     slug2 = r2.json()["slug"]
     assert slug1 != slug2
     assert slug2.startswith("acme-furniture-co-")
+
+
+@pytest.mark.asyncio
+async def test_public_merchant_returns_safe_storefront_settings(auth_client):
+    created = await auth_client.post(
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Public Store Ltd",
+            "display_name": "Public Store",
+            "settings": {
+                "onboarding_data": {
+                    "description": "Furniture for thoughtful homes.",
+                    "categories": ["Living Room", "Lighting"],
+                },
+                "storefront": {
+                    "tagline": "Live beautifully.",
+                    "hero_image_url": "https://example.com/hero.webp",
+                    "featured_categories": ["Lighting"],
+                },
+                "security": {"allowed_ips": "10.0.0.1"},
+                "notifications": {"email_new_order": True},
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = await auth_client.get(
+        f"/api/v1/merchants/public/{created.json()['slug']}"
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "settings" not in body
+    assert body["storefront"] == {
+        "tagline": "Live beautifully.",
+        "description": "Furniture for thoughtful homes.",
+        "hero_image_url": "https://example.com/hero.webp",
+        "categories": ["Living Room", "Lighting"],
+        "featured_categories": ["Lighting"],
+    }
 
 
 @pytest.mark.asyncio
@@ -333,3 +392,87 @@ async def test_get_nearby_merchants_proximity_sorting(auth_client, db_session):
     assert close_item["distance"] is not None
     assert far_item["distance"] is not None
     assert close_item["distance"] < far_item["distance"]
+
+
+def test_id_generator_validation_and_parsing():
+    from app.utils.id_generator import (
+        validate_mpuid,
+        validate_mpsuid,
+        parse_mpuid,
+        parse_mpsuid,
+    )
+
+    # Valid MPUID
+    mpuid = "SIM-M-MH-000142-M"
+    assert validate_mpuid(mpuid) is True
+    parsed_m = parse_mpuid(mpuid)
+    assert parsed_m["state"] == "MH"
+    assert parsed_m["sequence"] == "000142"
+    assert parsed_m["city_code"] == "M"
+
+    # Invalid MPUID
+    assert validate_mpuid("INVALID-ID") is False
+    assert validate_mpuid("m1234567") is False
+
+    # Valid MPSUID
+    mpsuid = "SIM-S-000142-01-M"
+    assert validate_mpsuid(mpsuid) is True
+    parsed_s = parse_mpsuid(mpsuid)
+    assert parsed_s["merchant_sequence"] == "000142"
+    assert parsed_s["shop_sequence"] == "01"
+    assert parsed_s["city_code"] == "M"
+
+    # Invalid MPSUID
+    assert validate_mpsuid("S123") is False
+
+
+@pytest.mark.asyncio
+async def test_create_merchant_generates_mpuid_and_mpsuid(auth_client):
+    from app.utils.id_generator import validate_mpuid, validate_mpsuid
+
+    # Create primary shop
+    r1 = await auth_client.post(
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Maharashtra Traders Pvt Ltd",
+            "display_name": "MH Store 1",
+            "state_code": "MH",
+            "city_code": "M",
+        },
+    )
+    assert r1.status_code == 201, r1.text
+    b1 = r1.json()
+    assert validate_mpuid(b1["partner_id"]) is True
+    assert validate_mpsuid(b1["shop_id"]) is True
+    assert b1["partner_id"].startswith("SIM-M-MH-")
+    assert b1["partner_id"].endswith("-M")
+    assert b1["shop_id"].startswith("SIM-S-")
+    assert b1["shop_id"].endswith("-01-M")
+
+    # Create secondary shop under same owner
+    r2 = await auth_client.post(
+        "/api/v1/merchants/",
+        json={
+            "legal_name": "Maharashtra Traders Store 2",
+            "display_name": "MH Store 2",
+            "state_code": "MH",
+            "city_code": "M",
+        },
+    )
+    assert r2.status_code == 201, r2.text
+    b2 = r2.json()
+    # Should inherit partner_id
+    assert b2["partner_id"] == b1["partner_id"]
+    # Shop ID sequence should increment to -02-M
+    assert b2["shop_id"].endswith("-02-M")
+
+
+@pytest.mark.asyncio
+async def test_validate_id_endpoint(auth_client):
+    r = await auth_client.get("/api/v1/merchants/validate-id?id_string=SIM-M-DL-000142-N")
+    assert r.status_code == 200
+    b = r.json()
+    assert b["is_valid"] is True
+    assert b["type"] == "MPUID"
+    assert b["parsed"]["state"] == "DL"
+

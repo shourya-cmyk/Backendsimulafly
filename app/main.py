@@ -22,9 +22,12 @@ from app.routers import (
     cart,
     chat,
     contacts,
+    coupons,
     events,
     leads,
     merchant_products,
+    merchant_onboarding,
+    merchant_verification,
     merchants,
     notifications,
     products,
@@ -168,6 +171,8 @@ def create_app() -> FastAPI:
     app.include_router(buyer_leads.router, prefix=api_prefix)
     app.include_router(auth.router, prefix=api_prefix)
     app.include_router(merchants.router, prefix=api_prefix)
+    app.include_router(merchant_onboarding.router, prefix=api_prefix)
+    app.include_router(merchant_verification.router, prefix=api_prefix)
     app.include_router(merchant_products.router, prefix=api_prefix)
     app.include_router(support.router, prefix=api_prefix)
     app.include_router(wallet.router, prefix=api_prefix)
@@ -183,6 +188,7 @@ def create_app() -> FastAPI:
     app.include_router(products.router, prefix=api_prefix)
     app.include_router(styles.router, prefix=api_prefix)
     app.include_router(upload.router, prefix=api_prefix)
+    app.include_router(coupons.router, prefix=api_prefix)
     app.include_router(admin_router, prefix=api_prefix)
 
     # Static style images — served at /static/styles/imageN.jpg.

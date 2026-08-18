@@ -55,6 +55,9 @@ class ChatResponse(BaseModel):
     # of the user's room. The client polls /visualize/{task_id} to know
     # when the room_preview message lands in the session.
     makeover_task_id: uuid.UUID | None = None
+    # Set when a normal chat turn asks the image model to create something.
+    # The client polls the existing /visualize/{task_id} status endpoint.
+    image_task_id: uuid.UUID | None = None
 
 
 class MessageOut(BaseModel):

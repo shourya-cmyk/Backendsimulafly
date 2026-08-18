@@ -30,6 +30,7 @@ class MerchantProductSimpleOut(BaseModel):
     category: str | None = None
     in_app_price: float | None = None
     primary_image_url: str | None = None
+    additional_images: list[str] = Field(default_factory=list)
     description: str | None = None
     brand: str | None = None
     custom_metadata: dict = Field(default_factory=dict)
@@ -45,6 +46,7 @@ class MerchantProductOut(BaseModel):
     category: str | None = None
     in_app_price: float | None = None
     primary_image_url: str | None = None
+    additional_images: list[str] = Field(default_factory=list)
     description: str | None = None
     brand: str | None = None
     has_simulafly_listing: bool = False

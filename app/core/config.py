@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
 
+    # Sandbox.co.in verification API. Keep credentials server-side only.
+    SANDBOX_API_BASE_URL: str = "https://test-api.sandbox.co.in"
+    SANDBOX_API_KEY: str = ""
+    SANDBOX_API_SECRET: str = ""
+    SANDBOX_API_VERSION: str = "1.0.0"
+    SANDBOX_MOCK: bool = False
+    KYC_RATE_LIMIT_PER_HOUR: int = 10
+
     # --- Admin panel backend settings ---
     # Admin JWT lifetimes (separate from buyer-app tokens; aud="simulafly-admin").
     ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30

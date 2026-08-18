@@ -30,6 +30,7 @@ from app.models.event import (
     LedgerEntryType,
 )
 from app.models.merchant import Merchant, MerchantMember, MerchantStatus, MemberRole
+from app.models.merchant_verification import PanVerification, GstinVerification
 from app.models.merchant_product import (
     MerchantProduct,
     MerchantProductVariant,
@@ -61,6 +62,7 @@ from app.models.invoice import (
     InvoiceStatus,
 )
 from app.models.redeem_code import RedeemCode, RedeemCodeStatus
+from app.models.coupon import MerchantCoupon, DiscountType
 from app.models.support import (
     SupportTicket,
     SupportMessage,
@@ -106,6 +108,8 @@ __all__ = [
     "MerchantMember",
     "MerchantStatus",
     "MemberRole",
+    "PanVerification",
+    "GstinVerification",
     "MerchantProduct",
     "MerchantProductVariant",
     "ProductStatus",

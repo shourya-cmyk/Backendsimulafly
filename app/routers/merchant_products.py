@@ -187,6 +187,18 @@ async def update_product(
     needs_embedding_regen = _embedding_fields_changed(body, product)
 
     data = body.model_dump(exclude_unset=True)
+    effective_primary = data.get("primary_image_url", product.primary_image_url)
+    effective_additional = data.get("additional_images", product.additional_images) or []
+    if effective_additional and not effective_primary:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="primary_image_url is required when additional images are provided",
+        )
+    if effective_primary and effective_primary in effective_additional:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="product image URLs must be unique",
+        )
     for k, v in data.items():
         setattr(product, k, v)
 
@@ -241,8 +253,7 @@ async def publish_product(
 
     # Phase 3: enforce wallet balance ≥ threshold before publishing
     from app.models.wallet import Wallet
-    primary_id = await get_primary_merchant_id(db, ctx.merchant.id)
-    res = await db.execute(select(Wallet).where(Wallet.merchant_id == primary_id))
+    res = await db.execute(select(Wallet).where(Wallet.merchant_id == ctx.merchant.id))
     wallet = res.scalar_one_or_none()
     if not wallet or wallet.balance < wallet.low_balance_threshold:
         raise HTTPException(

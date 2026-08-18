@@ -1,13 +1,14 @@
-"""RAG pipeline as a LangGraph StateGraph with conditional routing.
+"""Conversational agent pipeline with conditional catalog retrieval.
 
 Flow:
     START → load_history → classify_intent
                               ├─(shopping)──→ retrieve → rerank → dedupe_categories → generate_reply → END
                               └─(chat)──────────────────────────────────────────────→ generate_reply → END
 
-The classifier decides per-turn whether the user wants product suggestions. Pure
-conversation turns skip retrieval/rerank entirely, so Sumi can have a normal
-back-and-forth without forcing products into every reply.
+The classifier separates ordinary conversation, catalog shopping, and image
+generation. Pure conversation turns skip retrieval/rerank entirely, so the
+assistant can answer general questions without forcing products into every
+reply. All paths retain the same session history.
 """
 
 from __future__ import annotations
@@ -34,14 +35,20 @@ log = get_logger(__name__)
 
 TOP_K = 15
 FINAL_K = 5
-HISTORY_WINDOW = 10
+HISTORY_WINDOW = 30
 
 
 # ------------------------------ prompts ------------------------------
 
-INTENT_SYSTEM_PROMPT = """You are a routing classifier for an AI interior-design
-chat. Decide whether the user's CURRENT turn wants product recommendations, and
-if so, extract structured queries describing what they're shopping for.
+INTENT_SYSTEM_PROMPT = """You are a routing classifier for a general AI assistant
+that also has interior-design shopping and image-generation tools. Classify the
+user's CURRENT turn and extract the relevant structured data.
+
+Set image_generation_intent = true only when the user explicitly wants a new
+image created, drawn, rendered, illustrated, or generated. It is false when the
+user merely asks to see catalog products, discusses an existing image, or asks a
+factual question about images. When true, write a self-contained `image_prompt`
+that preserves the user's requested subject, style, mood, composition, and text.
 
 Set shopping_intent = true when the user:
   - explicitly asks for product suggestions ("show me", "suggest", "find", "recommend")
@@ -61,7 +68,9 @@ When shopping_intent = true, populate `queries`:
   - keywords: 3-6 descriptive words grounded in what the user asked for
   - max_price: INR; null if unspecified
 
-When shopping_intent = false, `queries` should be empty.
+Image generation takes precedence over shopping: when image_generation_intent
+is true, shopping_intent must be false. When shopping_intent is false, `queries`
+should be empty.
 """
 
 DESIGNER_SHOPPING_PROMPT = """You are Sumi, a warm and knowledgeable interior designer.
@@ -82,6 +91,9 @@ Rules:
   PREVIEW_REQUEST: {{"product_ids": ["<uuid1>", "<uuid2>", ...]}}
 - Respect the user's budget and style preferences.
 - Never invent products — only recommend from the retrieved list.
+- After the answer/directives, append exactly one line containing three short,
+  useful questions the user could ask next:
+  SUGGESTIONS_JSON: ["question 1", "question 2", "question 3"]
 
 USER PROFILE: {design_profile}
 {room_context_block}
@@ -89,20 +101,27 @@ AVAILABLE PRODUCTS (best pick per category):
 {product_brief}
 """
 
-DESIGNER_CHAT_PROMPT = """You are Sumi, a warm and knowledgeable interior designer.
-Right now the user is having a conversation — NOT asking you to find products.
-Respond naturally: answer their question, give design advice, ask a follow-up,
-or acknowledge what they said. Do not recommend specific products in this turn.
+DESIGNER_CHAT_PROMPT = """You are Sumi, Simulafly's capable general AI assistant
+with special expertise in interiors and visual design. The user may ask about
+any topic. Answer the request directly and accurately while naturally retaining
+context from the conversation. Do not force the conversation back to design.
 
 Rules:
-- Be warm, concise, and specific. At most one clarifying question per turn.
+- Be warm, clear, and specific. Use Markdown when it improves readability.
+- Match the depth of the answer to the request; do not artificially cut off a
+  useful explanation.
 - Do NOT output PRODUCTS_JSON or PREVIEW_REQUEST directives.
 - Do NOT mention specific product names, SKUs, or prices.
-- If the user's next message implies they want options, invite them to say so
-  (e.g. "Want me to pull up some options?") — but don't pre-empt.
+- If IMAGE GENERATION REQUEST is present below, briefly confirm what will be
+  created. The image tool runs after your reply; never claim it already finished.
+- After the answer, append exactly one line containing three short, contextual
+  questions the user could ask next. They must be written from the user's point
+  of view and must not repeat the current request:
+  SUGGESTIONS_JSON: ["question 1", "question 2", "question 3"]
 
 USER PROFILE: {design_profile}
-{room_context_block}"""
+{room_context_block}
+{image_request_block}"""
 
 
 # ------------------------------ structured outputs ------------------------------
@@ -119,6 +138,14 @@ class IntentClassification(BaseModel):
         description="True only when the user wants product recommendations this turn"
     )
     queries: list[IntentQuery] = Field(default_factory=list)
+    image_generation_intent: bool = Field(
+        default=False,
+        description="True only when the user explicitly requests creation of a new image",
+    )
+    image_prompt: str | None = Field(
+        default=None,
+        description="Self-contained generation prompt when image_generation_intent is true",
+    )
     room_style: str | None = None
     budget_total: float | None = None
 
@@ -137,16 +164,20 @@ class RAGState(TypedDict, total=False):
     context_summary: str | None
     design_profile: dict[str, Any]
     db: AsyncSession
+    image_data_url: str | None
 
     # produced by nodes
     history: list[Message]
     shopping_intent: bool
+    image_generation_intent: bool
+    image_generation_prompt: str | None
     intents: list[IntentQuery]
     candidates: list[MerchantProduct]
     products: list[MerchantProduct]
     assistant_text: str
     preview_product_id: uuid.UUID | None      # single-product preview
     preview_product_ids: list[uuid.UUID] | None  # multi-product composite preview
+    suggested_questions: list[str]
 
 
 @dataclass
@@ -156,6 +187,8 @@ class RAGResult:
     preview_product_id: uuid.UUID | None
     preview_product_ids: list[uuid.UUID] | None
     shopping_intent: bool
+    image_generation_prompt: str | None = None
+    suggested_questions: list[str] | None = None
 
 
 # ------------------------------ nodes ------------------------------
@@ -174,7 +207,7 @@ async def _node_load_history(state: RAGState) -> dict:
 
 
 async def _node_classify_intent(state: RAGState) -> dict:
-    """Decide whether this turn wants products, and extract queries if so."""
+    """Separate general chat, catalog shopping, and image generation."""
     history = state.get("history", [])
     transcript = "\n".join(f"{m.role}: {m.content}" for m in history)
     room_ctx = state.get("context_summary") or ""
@@ -198,12 +231,19 @@ async def _node_classify_intent(state: RAGState) -> dict:
                 "user_message": state["user_message"],
             }
         )
-        shopping = bool(parsed.shopping_intent)
-        queries = parsed.queries
+        image_generation = bool(parsed.image_generation_intent)
+        shopping = bool(parsed.shopping_intent) and not image_generation
+        queries = parsed.queries if shopping else []
+        image_prompt = parsed.image_prompt if image_generation else None
     except Exception as e:
         log.warning("intent_classification_failed", error=str(e))
-        shopping = _heuristic_shopping_intent(state["user_message"])
+        image_generation = _heuristic_image_intent(state["user_message"])
+        shopping = (
+            _heuristic_shopping_intent(state["user_message"])
+            and not image_generation
+        )
         queries = []
+        image_prompt = state["user_message"] if image_generation else None
 
     # If the classifier flagged shopping but produced no queries, synthesize one
     # from the user message so retrieval still has something to embed.
@@ -215,10 +255,16 @@ async def _node_classify_intent(state: RAGState) -> dict:
     log.info(
         "rag.classify_intent",
         shopping=shopping,
+        image_generation=image_generation,
         query_count=len(queries),
         preview=state["user_message"][:60],
     )
-    return {"shopping_intent": shopping, "intents": queries}
+    return {
+        "shopping_intent": shopping,
+        "image_generation_intent": image_generation,
+        "image_generation_prompt": image_prompt,
+        "intents": queries,
+    }
 
 
 def _heuristic_shopping_intent(user_message: str) -> bool:
@@ -231,6 +277,17 @@ def _heuristic_shopping_intent(user_message: str) -> bool:
         "cheaper", "alternative", "instead",
     )
     return any(t in m for t in triggers)
+
+
+def _heuristic_image_intent(user_message: str) -> bool:
+    """Conservative fallback used only when structured classification fails."""
+    m = user_message.lower()
+    creation_words = (
+        "generate an image", "generate image", "create an image", "create image",
+        "make an image", "make me an image", "draw an image", "draw me",
+        "illustrate ", "create a picture", "generate a picture", "render an image",
+    )
+    return any(trigger in m for trigger in creation_words)
 
 
 async def _node_retrieve(state: RAGState) -> dict:
@@ -343,6 +400,12 @@ async def _node_generate_reply(state: RAGState) -> dict:
         if state.get("context_summary")
         else ""
     )
+    image_request_block = ""
+    if state.get("image_generation_intent"):
+        image_request_block = (
+            "IMAGE GENERATION REQUEST: The image tool will create this after "
+            f"your response: {state.get('image_generation_prompt') or state['user_message']}"
+        )
 
     if shopping:
         product_brief = (
@@ -361,6 +424,7 @@ async def _node_generate_reply(state: RAGState) -> dict:
         system = DESIGNER_CHAT_PROMPT.format(
             design_profile=json.dumps(state.get("design_profile") or {}),
             room_context_block=room_context_block,
+            image_request_block=image_request_block,
         )
 
     messages: list = [SystemMessage(content=system)]
@@ -369,16 +433,37 @@ async def _node_generate_reply(state: RAGState) -> dict:
             messages.append(HumanMessage(content=m.content))
         elif m.role == "assistant":
             messages.append(AIMessage(content=m.content))
-    messages.append(HumanMessage(content=state["user_message"]))
+    if state.get("image_data_url"):
+        messages.append(
+            HumanMessage(
+                content=[
+                    {"type": "text", "text": state["user_message"]},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": state["image_data_url"]},
+                    },
+                ]
+            )
+        )
+    else:
+        messages.append(HumanMessage(content=state["user_message"]))
 
     llm = get_chat_llm(temperature=0.6, max_tokens=700)
     response = await llm.ainvoke(messages)
     raw = response.content if isinstance(response.content, str) else str(response.content)
     cleaned, preview_single, preview_multi = _strip_directives(raw)
+    cleaned, suggestions = _extract_suggestions(cleaned)
+    if not suggestions:
+        suggestions = _fallback_suggestions(
+            state["user_message"],
+            shopping=shopping,
+            image_generation=bool(state.get("image_generation_intent")),
+        )
     return {
         "assistant_text": cleaned,
         "preview_product_id": preview_single,
         "preview_product_ids": preview_multi,
+        "suggested_questions": suggestions,
     }
 
 
@@ -423,6 +508,49 @@ def _vector_literal(embedding: list[float]) -> str:
 
 
 _PREVIEW_RE = re.compile(r"PREVIEW_REQUEST:\s*(\{.*?\})", re.DOTALL)
+_SUGGESTIONS_RE = re.compile(r"SUGGESTIONS_JSON:\s*(\[[^\n]*\])")
+
+
+def _extract_suggestions(text: str) -> tuple[str, list[str]]:
+    """Remove the model-only directive and return up to three safe labels."""
+    suggestions: list[str] = []
+    match = _SUGGESTIONS_RE.search(text)
+    if match:
+        try:
+            values = json.loads(match.group(1))
+            if isinstance(values, list):
+                for value in values:
+                    label = str(value).strip()
+                    if label and label not in suggestions:
+                        suggestions.append(label[:120])
+                    if len(suggestions) == 3:
+                        break
+        except (TypeError, json.JSONDecodeError):
+            pass
+    cleaned = _SUGGESTIONS_RE.sub("", text).strip()
+    return cleaned, suggestions
+
+
+def _fallback_suggestions(
+    user_message: str, *, shopping: bool, image_generation: bool
+) -> list[str]:
+    if image_generation:
+        return [
+            "Create a different style",
+            "Make it more detailed",
+            "Generate another variation",
+        ]
+    if shopping:
+        return [
+            "Show me more options",
+            "Which one fits best?",
+            "Can I see it in my room?",
+        ]
+    return [
+        "Tell me more about that",
+        "Can you give me an example?",
+        "What should I explore next?",
+    ]
 
 
 def _strip_directives(
@@ -511,6 +639,7 @@ async def run_rag_turn(
     user_message: str,
     context_summary: str | None,
     design_profile: dict[str, Any],
+    image_data_url: str | None = None,
 ) -> RAGResult:
     """Execute one RAG turn through the LangGraph StateGraph."""
     state: RAGState = {
@@ -519,6 +648,7 @@ async def run_rag_turn(
         "user_message": user_message,
         "context_summary": context_summary,
         "design_profile": design_profile or {},
+        "image_data_url": image_data_url,
     }
     final: RAGState = await _graph().ainvoke(state)  # type: ignore[assignment]
     return RAGResult(
@@ -527,4 +657,6 @@ async def run_rag_turn(
         preview_product_id=final.get("preview_product_id"),
         preview_product_ids=final.get("preview_product_ids"),
         shopping_intent=bool(final.get("shopping_intent")),
+        image_generation_prompt=final.get("image_generation_prompt"),
+        suggested_questions=list(final.get("suggested_questions") or []),
     )

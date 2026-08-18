@@ -30,11 +30,35 @@ async def register(body: RegisterRequest, db: DBSession) -> User:
     existing = await db.execute(select(User).where(User.email == body.email.lower()))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email already registered")
+    merchant_agreements = None
+    if body.terms_accepted or body.privacy_policy_accepted or body.merchant_agreement_accepted:
+        if not (
+            body.terms_accepted
+            and body.privacy_policy_accepted
+            and body.merchant_agreement_accepted
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Terms, Privacy Policy, and Merchant Agreement must all be accepted",
+            )
+        from datetime import datetime, timezone
+
+        merchant_agreements = {
+            "accepted_at": datetime.now(timezone.utc).isoformat(),
+            "versions": {
+                "terms_and_conditions": "2026-08-18",
+                "privacy_policy": "2026-08-18",
+                "merchant_agreement": "2026-08-18",
+            },
+        }
     user = User(
         email=body.email.lower(),
         hashed_password=hash_password(body.password),
         full_name=body.full_name,
         is_email_verified=False,
+        design_profile={"merchant_registration_agreements": merchant_agreements}
+        if merchant_agreements
+        else {},
     )
     db.add(user)
     await db.flush()
@@ -263,7 +287,7 @@ class SendMobileOtpRequest(BaseModel):
 
 
 @router.post("/send-mobile-otp")
-async def send_mobile_otp(body: SendMobileOtpRequest, db: DBSession):
+async def send_mobile_otp(body: SendMobileOtpRequest, user: CurrentUser, db: DBSession):
     import random
     from datetime import datetime, timedelta, timezone
     from app.models.otp import OTP
@@ -295,7 +319,7 @@ class VerifyMobileOtpRequest(BaseModel):
 
 
 @router.post("/verify-mobile-otp")
-async def verify_mobile_otp(body: VerifyMobileOtpRequest, db: DBSession):
+async def verify_mobile_otp(body: VerifyMobileOtpRequest, user: CurrentUser, db: DBSession):
     from datetime import datetime, timezone
     from app.models.otp import OTP
 
@@ -318,6 +342,7 @@ async def verify_mobile_otp(body: VerifyMobileOtpRequest, db: DBSession):
         raise HTTPException(status_code=400, detail="Invalid verification code. Please try again.")
 
     await db.execute(delete(OTP).where(OTP.target == phone))
+    user.phone = phone
     await db.commit()
 
     return {"message": "Mobile number verified successfully."}

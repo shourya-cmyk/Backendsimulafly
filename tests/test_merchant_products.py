@@ -71,6 +71,34 @@ def test_merchant_product_create_validates_required_fields():
     with pytest.raises(ValidationError):
         MerchantProductCreate(title="Just Title")  # missing sku
 
+    gallery = MerchantProductCreate(
+        sku="G1",
+        title="Gallery product",
+        primary_image_url="https://example.com/1.jpg",
+        additional_images=[
+            "https://example.com/2.jpg",
+            "https://example.com/3.jpg",
+            "https://example.com/4.jpg",
+            "https://example.com/5.jpg",
+        ],
+    )
+    assert len(gallery.additional_images) == 4
+
+    with pytest.raises(ValidationError):
+        MerchantProductCreate(
+            sku="G2",
+            title="Too many images",
+            primary_image_url="https://example.com/1.jpg",
+            additional_images=[f"https://example.com/{i}.jpg" for i in range(2, 7)],
+        )
+
+    with pytest.raises(ValidationError):
+        MerchantProductCreate(
+            sku="G3",
+            title="No primary image",
+            additional_images=["https://example.com/2.jpg"],
+        )
+
 
 
 

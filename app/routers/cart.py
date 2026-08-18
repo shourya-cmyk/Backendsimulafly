@@ -61,31 +61,6 @@ async def add_to_cart(body: CartItemAdd, user: CurrentUser, db: DBSession) -> Ca
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
 
-    # Check range restriction
-    if user.latitude is not None and user.longitude is not None and product.merchant:
-        m = product.merchant
-        if m.latitude is not None and m.longitude is not None and m.range_km is not None:
-            import math
-            def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-                R = 6371.0  # Earth's radius in km
-                dlat = math.radians(lat2 - lat1)
-                dlon = math.radians(lon2 - lon1)
-                a = (
-                    math.sin(dlat / 2) ** 2
-                    + math.cos(math.radians(lat1))
-                    * math.cos(math.radians(lat2))
-                    * math.sin(dlon / 2) ** 2
-                )
-                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-                return R * c
-
-            dist = calculate_distance(user.latitude, user.longitude, m.latitude, m.longitude)
-            if dist > m.range_km:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="This shop does not serve your location."
-                )
-
     existing = await db.execute(
         select(CartItem).where(
             CartItem.user_id == user.id,

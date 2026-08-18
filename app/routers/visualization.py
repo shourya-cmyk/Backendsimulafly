@@ -561,6 +561,11 @@ async def _persist_and_mark_done(
                 "type": "room_preview",
                 "image_id": str(generated.id),
                 "product_id": str(product_id) if product_id else None,
+                "suggestions": [
+                    "Try a different placement",
+                    "Show me similar options",
+                    "What else would work here?",
+                ],
             },
             image_id=generated.id,
         )

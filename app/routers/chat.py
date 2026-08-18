@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from langchain_core.messages import HumanMessage
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
@@ -122,7 +122,17 @@ async def analyze(
         f"Style: {body.style_name}" if body.style_name else "[room scan attached]"
     )
     user_msg = Message(session_id=session.id, role="user", content=user_content, image_id=image.id)
-    assistant_msg = Message(session_id=session.id, role="assistant", content=reply)
+    initial_suggestions = [
+        "What should I change first?",
+        "Suggest a colour palette",
+        "Show me furniture options",
+    ]
+    assistant_msg = Message(
+        session_id=session.id,
+        role="assistant",
+        content=reply,
+        ui_payload={"type": "suggestions", "suggestions": initial_suggestions},
+    )
     db.add_all([user_msg, assistant_msg])
     await db.commit()
     await db.refresh(assistant_msg)
@@ -156,7 +166,7 @@ async def analyze(
     return ChatResponse(
         message_id=assistant_msg.id,
         content=assistant_msg.content,
-        ui_payload=None,
+        ui_payload=assistant_msg.ui_payload,
         created_at=assistant_msg.created_at,
         makeover_task_id=makeover_task_id,
     )
@@ -226,6 +236,11 @@ async def _run_style_makeover(
                     "type": "room_preview",
                     "image_id": str(generated.id),
                     "product_id": None,
+                    "suggestions": [
+                        "Try another design style",
+                        "Change the colour palette",
+                        "Find products for this look",
+                    ],
                 },
                 image_id=generated.id,
             )
@@ -268,6 +283,7 @@ async def chat(
     # If an image is attached, persist it and store the resulting image id
     # on the user message so the chat history can render the photo.
     attached_image_id: uuid.UUID | None = None
+    attached_image_bytes: bytes | None = None
     if has_image:
         image = await persist_base64(
             db,
@@ -277,6 +293,24 @@ async def chat(
             source="upload",
         )
         attached_image_id = image.id
+        attached_image_bytes = image.data
+
+    # Run the agent before adding this turn to the history query. This prevents
+    # the current prompt being sent to the model twice (once as history and
+    # once as the current HumanMessage).
+    agent_text = body.content if has_content else "What can you tell me about this image?"
+    image_data_url = None
+    if has_image:
+        clean_base64 = body.image_base64.split(",", 1)[-1]  # type: ignore[union-attr]
+        image_data_url = f"data:{body.media_type};base64,{clean_base64}"
+    result = await run_rag_turn(
+        db,
+        session_id=session.id,
+        user_message=agent_text,
+        context_summary=session.context_summary,
+        design_profile=user.design_profile or {},
+        image_data_url=image_data_url,
+    )
 
     user_msg = Message(
         session_id=session.id,
@@ -285,18 +319,6 @@ async def chat(
         image_id=attached_image_id,
     )
     db.add(user_msg)
-    await db.flush()
-
-    # The RAG/LLM turn is text-only for now — vision integration on the
-    # follow-up turns is a separate feature. The image still gets persisted
-    # and shown in the chat history above.
-    result = await run_rag_turn(
-        db,
-        session_id=session.id,
-        user_message=body.content if has_content else "[user attached an image]",
-        context_summary=session.context_summary,
-        design_profile=user.design_profile or {},
-    )
 
     # Phase 4: emit ai_rag_mention for each MerchantProduct the RAG surfaced.
     # Guard with isinstance — rag_service still returns legacy Product objects;
@@ -340,6 +362,29 @@ async def chat(
         # Single-product preview
         ui_payload = {"type": "preview_request", "product_id": str(result.preview_product_id)}
 
+    suggestions = list(result.suggested_questions or [])[:3]
+    if suggestions:
+        if ui_payload is None:
+            ui_payload = {"type": "suggestions"}
+        ui_payload["suggestions"] = suggestions
+
+    image_job = None
+    if result.image_generation_prompt:
+        image_cost = 2.0
+        if (user.credit_balance or 0.0) < image_cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="insufficient credits; image generation needs at least ₹2",
+            )
+        user.credit_balance = (user.credit_balance or 0.0) - image_cost
+        image_job = await create_job(
+            db,
+            user_id=user.id,
+            session_id=session.id,
+            product_id=None,
+            room_image_id=None,
+        )
+
     assistant_msg = Message(
         session_id=session.id,
         role="assistant",
@@ -347,8 +392,20 @@ async def chat(
         ui_payload=ui_payload,
     )
     db.add(assistant_msg)
+    session.updated_at = func.now()
     await db.commit()
     await db.refresh(assistant_msg)
+
+    if image_job is not None:
+        asyncio.create_task(
+            _run_prompt_image_generation(
+                job_id=image_job.id,
+                user_id=user.id,
+                session_id=session.id,
+                prompt=result.image_generation_prompt or body.content,
+                reference_image=attached_image_bytes,
+            )
+        )
 
     background.add_task(extract_and_update_profile, user.id, session.id)
 
@@ -357,7 +414,68 @@ async def chat(
         content=assistant_msg.content,
         ui_payload=assistant_msg.ui_payload,
         created_at=assistant_msg.created_at,
+        image_task_id=image_job.id if image_job else None,
     )
+
+
+async def _run_prompt_image_generation(
+    *,
+    job_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID,
+    prompt: str,
+    reference_image: bytes | None = None,
+) -> None:
+    """Generate an arbitrary image and append it to the same conversation."""
+    try:
+        log.info("chat.image_generation.start", job_id=str(job_id), session_id=str(session_id))
+        ai = get_image_client()
+        if reference_image is not None:
+            png_bytes = await ai.image_edit(
+                reference_image,
+                None,
+                prompt,
+                fallback_prompt=prompt,
+            )
+        else:
+            png_bytes = await ai.image_gen(prompt, seed=None)
+        async with SessionLocal() as db:
+            generated = await persist_image(
+                db,
+                owner_id=user_id,
+                data=png_bytes,
+                media_type="image/png",
+                source="generated_ai",
+            )
+            assistant_msg = Message(
+                session_id=session_id,
+                role="assistant",
+                content="Here’s the image I created for you.",
+                ui_payload={
+                    "type": "room_preview",
+                    "image_id": str(generated.id),
+                    "product_id": None,
+                    "suggestions": [
+                        "Create a different style",
+                        "Change a detail in this image",
+                        "Generate another variation",
+                    ],
+                },
+                image_id=generated.id,
+            )
+            db.add(assistant_msg)
+            await db.flush()
+            await mark_done(db, job_id, image_id=generated.id, message_id=assistant_msg.id)
+            await db.commit()
+            log.info(
+                "chat.image_generation.done",
+                job_id=str(job_id),
+                image_id=str(generated.id),
+                bytes=len(png_bytes),
+            )
+    except Exception as e:
+        log.exception("chat.image_generation.failed", job_id=str(job_id), error=str(e))
+        await mark_failed(job_id, str(e))
 
 
 @router.get("/{session_id}/messages", response_model=list[MessageOut])
