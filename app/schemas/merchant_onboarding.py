@@ -20,7 +20,7 @@ RelationshipType = Literal["owner", "partner", "director", "authorized_represent
 FulfilmentMethod = Literal[
     "merchant_delivery",
     "customer_pickup",
-    "platform_delivery",
+    "third_party_delivery",
     "installation_service",
 ]
 
