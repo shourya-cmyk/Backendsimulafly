@@ -101,3 +101,18 @@ async def auth_client(client, test_user) -> AsyncClient:
     token = create_access_token(str(test_user.id))
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
+
+
+@pytest_asyncio.fixture
+async def verify_merchant(db_session):
+    """Mark one or more test shops as provider-verified."""
+    from app.models.merchant import Merchant
+
+    async def _verify(*merchant_ids) -> None:
+        for merchant_id in merchant_ids:
+            merchant = await db_session.get(Merchant, uuid.UUID(str(merchant_id)))
+            assert merchant is not None
+            merchant.is_kyc_completed = True
+        await db_session.commit()
+
+    return _verify

@@ -1,3 +1,6 @@
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, delete
@@ -11,6 +14,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
+from app.models.otp import OTP
 from app.schemas.auth import (
     GoogleLoginRequest,
     LoginRequest,
@@ -21,8 +25,54 @@ from app.schemas.auth import (
 from app.schemas.user import UserOut
 from app.services.google_auth import GoogleAuthError, verify_id_token
 from app.utils.dependencies import DBSession, CurrentUser
+from app.utils.email import send_otp_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+EMAIL_OTP_TTL = timedelta(minutes=10)
+EMAIL_OTP_RESEND_COOLDOWN = timedelta(seconds=60)
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+async def _send_email_verification_otp(email: str, db: DBSession) -> bool:
+    """Send at most one verification email per address during the cooldown window."""
+    now = datetime.now(timezone.utc)
+    existing = (
+        await db.execute(
+            select(OTP)
+            .where(OTP.target == email)
+            .order_by(OTP.created_at.desc())
+        )
+    ).scalars().first()
+
+    if (
+        existing is not None
+        and _as_utc(existing.expires_at) > now
+        and _as_utc(existing.created_at) >= now - EMAIL_OTP_RESEND_COOLDOWN
+    ):
+        return False
+
+    await db.execute(delete(OTP).where(OTP.target == email))
+    otp_entry = OTP(
+        target=email,
+        code=f"{secrets.randbelow(900_000) + 100_000}",
+        expires_at=now + EMAIL_OTP_TTL,
+    )
+    db.add(otp_entry)
+    await db.commit()
+
+    if not send_otp_email(email, otp_entry.code):
+        await db.execute(delete(OTP).where(OTP.id == otp_entry.id))
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email. Please try again.",
+        )
+
+    return True
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -98,26 +148,6 @@ async def register(body: RegisterRequest, db: DBSession) -> User:
 
     await db.commit()
     await db.refresh(user)
-
-    # Generate and send email OTP
-    import random
-    from datetime import datetime, timedelta, timezone
-    from app.models.otp import OTP
-    from app.utils.email import send_otp_email
-
-    otp_code = f"{random.randint(100000, 999999)}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
-    
-    try:
-        # Clear old OTPs
-        await db.execute(delete(OTP).where(OTP.target == user.email))
-        
-        otp_entry = OTP(target=user.email, code=otp_code, expires_at=expires_at)
-        db.add(otp_entry)
-        await db.commit()
-        send_otp_email(user.email, otp_code)
-    except Exception as e:
-        print(f"Error during registration OTP sending: {e}")
 
     return user
 
@@ -223,27 +253,13 @@ async def google_login(body: GoogleLoginRequest, db: DBSession) -> TokenPair:
 
 @router.post("/send-otp")
 async def send_otp(user: CurrentUser, db: DBSession):
-    import random
-    from datetime import datetime, timedelta, timezone
-    from app.models.otp import OTP
-    from app.utils.email import send_otp_email
-
-    # Clear old OTPs
-    await db.execute(delete(OTP).where(OTP.target == user.email))
-
-    otp_code = f"{random.randint(100000, 999999)}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
-    
-    otp_entry = OTP(target=user.email, code=otp_code, expires_at=expires_at)
-    db.add(otp_entry)
-    await db.commit()
-
-    print(f"\n========================================\n[EMAIL OTP] Sent to {user.email}: {otp_code}\n========================================\n")
-
-    success = send_otp_email(user.email, otp_code)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to send verification email. Please try again.")
-    return {"message": "Verification code sent successfully to your email."}
+    sent = await _send_email_verification_otp(user.email, db)
+    message = (
+        "Verification code sent successfully to your email."
+        if sent
+        else "A verification code was already sent. Please use the latest email."
+    )
+    return {"message": message}
 
 
 class VerifyOtpRequest(BaseModel):
@@ -252,9 +268,6 @@ class VerifyOtpRequest(BaseModel):
 
 @router.post("/verify-otp")
 async def verify_otp(body: VerifyOtpRequest, user: CurrentUser, db: DBSession):
-    from datetime import datetime, timezone
-    from app.models.otp import OTP
-
     res = await db.execute(
         select(OTP)
         .where(OTP.target == user.email)
@@ -266,7 +279,7 @@ async def verify_otp(body: VerifyOtpRequest, user: CurrentUser, db: DBSession):
         raise HTTPException(status_code=400, detail="No verification code found. Please request a new one.")
 
     now = datetime.now(timezone.utc)
-    if otp_entry.expires_at < now:
+    if _as_utc(otp_entry.expires_at) < now:
         raise HTTPException(status_code=400, detail="Verification code has expired. Please request a new one.")
 
     if otp_entry.code != body.otp:

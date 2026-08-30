@@ -1,3 +1,4 @@
+import math
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -6,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 ProductStatusLiteral = Literal["draft", "published", "paused_insufficient_funds", "archived"]
 MAX_PRODUCT_IMAGES = 5
+DIMENSION_NUMBER_KEYS = ("height", "width", "depth", "weight")
+DIMENSION_UNITS = {"cm", "inches"}
+WEIGHT_UNITS = {"g", "kg", "oz", "lb"}
 
 
 def _validate_additional_images(images: list[str] | None) -> list[str] | None:
@@ -20,6 +24,25 @@ def _validate_additional_images(images: list[str] | None) -> list[str] | None:
         raise ValueError("image URL must be at most 2048 characters")
     if len(set(cleaned)) != len(cleaned):
         raise ValueError("product image URLs must be unique")
+    return cleaned
+
+
+def _validate_dimensions(dimensions: dict | None) -> dict | None:
+    if dimensions is None:
+        return None
+    cleaned = dict(dimensions)
+    for key in DIMENSION_NUMBER_KEYS:
+        value = cleaned.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"dimensions.{key} must be numeric")
+        if not math.isfinite(float(value)) or value < 0:
+            raise ValueError(f"dimensions.{key} must be a finite non-negative number")
+    if cleaned.get("unit") is not None and cleaned["unit"] not in DIMENSION_UNITS:
+        raise ValueError("dimensions.unit must be cm or inches")
+    if cleaned.get("weight_unit") is not None and cleaned["weight_unit"] not in WEIGHT_UNITS:
+        raise ValueError("dimensions.weight_unit must be g, kg, oz, or lb")
     return cleaned
 
 
@@ -104,6 +127,11 @@ class MerchantProductCreate(BaseModel):
     in_app_stock: int | None = Field(default=None, ge=0)
     shop_ids: list[uuid.UUID] | None = None
 
+    @field_validator("dimensions")
+    @classmethod
+    def validate_dimensions(cls, dimensions: dict) -> dict:
+        return _validate_dimensions(dimensions) or {}
+
 
 class MerchantProductUpdate(BaseModel):
     sku: str | None = Field(default=None, min_length=1, max_length=64)
@@ -130,6 +158,11 @@ class MerchantProductUpdate(BaseModel):
     has_simulafly_listing: bool | None = None
     in_app_price: float | None = Field(default=None, ge=0)
     in_app_stock: int | None = Field(default=None, ge=0)
+
+    @field_validator("dimensions")
+    @classmethod
+    def validate_dimensions(cls, dimensions: dict | None) -> dict | None:
+        return _validate_dimensions(dimensions)
 
 
 class MerchantProductOut(BaseModel):

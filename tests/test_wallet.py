@@ -105,7 +105,7 @@ def test_topup_intent_request_validates_amount():
     assert valid.currency == "INR"
 
     with pytest.raises(ValidationError):
-        TopupIntentRequest(amount=0)
+        TopupIntentRequest(amount=499)
     with pytest.raises(ValidationError):
         TopupIntentRequest(amount=0.99)
     with pytest.raises(ValidationError):
@@ -169,11 +169,12 @@ async def test_create_merchant_also_creates_wallet(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_get_wallet_returns_zero_balance_for_new_merchant(auth_client):
+async def test_get_wallet_returns_zero_balance_for_new_merchant(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Wallet Read", "display_name": "WR"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.get(
         "/api/v1/merchant/wallet/", headers={"X-Merchant-Id": mid}
@@ -187,7 +188,7 @@ async def test_get_wallet_returns_zero_balance_for_new_merchant(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_list_transactions_returns_paginated_results(auth_client, db_session):
+async def test_list_transactions_returns_paginated_results(auth_client, db_session, verify_merchant):
     from decimal import Decimal
     from app.models.wallet import Transaction
     import uuid as uuid_mod
@@ -196,6 +197,7 @@ async def test_list_transactions_returns_paginated_results(auth_client, db_sessi
         "/api/v1/merchants/", json={"legal_name": "Txn List", "display_name": "TL"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     for i in range(5):
         db_session.add(
@@ -220,11 +222,12 @@ async def test_list_transactions_returns_paginated_results(auth_client, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_patch_wallet_settings_updates_threshold(auth_client):
+async def test_patch_wallet_settings_updates_threshold(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Threshold Test", "display_name": "TT"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.patch(
         "/api/v1/merchant/wallet/settings",
@@ -236,7 +239,7 @@ async def test_patch_wallet_settings_updates_threshold(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_topup_intent_creates_pending_transaction(auth_client, db_session):
+async def test_topup_intent_creates_pending_transaction(auth_client, db_session, verify_merchant):
     from unittest.mock import patch
     from sqlalchemy import select
     from app.models.wallet import Transaction
@@ -245,6 +248,7 @@ async def test_topup_intent_creates_pending_transaction(auth_client, db_session)
         "/api/v1/merchants/", json={"legal_name": "Intent Test", "display_name": "IT"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     fake_order = {"id": "order_TESTABC", "amount": 100000, "currency": "INR"}
     with (
@@ -272,7 +276,7 @@ async def test_topup_intent_creates_pending_transaction(auth_client, db_session)
 
 
 @pytest.mark.asyncio
-async def test_topup_intent_maps_provider_auth_failure_to_401(auth_client):
+async def test_topup_intent_maps_provider_auth_failure_to_401(auth_client, verify_merchant):
     from unittest.mock import patch
 
     class ProviderAuthError(Exception):
@@ -283,6 +287,7 @@ async def test_topup_intent_maps_provider_auth_failure_to_401(auth_client):
         json={"legal_name": "Razorpay Auth Test", "display_name": "RAT"},
     )
     merchant_id = response.json()["id"]
+    await verify_merchant(merchant_id)
 
     with patch(
         "app.routers.wallet.create_order",
@@ -291,7 +296,7 @@ async def test_topup_intent_maps_provider_auth_failure_to_401(auth_client):
         response = await auth_client.post(
             "/api/v1/merchant/wallet/topup/intent",
             headers={"X-Merchant-Id": merchant_id},
-            json={"amount": 100},
+            json={"amount": 500},
         )
 
     assert response.status_code == 401
@@ -299,7 +304,7 @@ async def test_topup_intent_maps_provider_auth_failure_to_401(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_topup_intent_hides_provider_error_details(auth_client):
+async def test_topup_intent_hides_provider_error_details(auth_client, verify_merchant):
     from unittest.mock import patch
 
     response = await auth_client.post(
@@ -307,6 +312,7 @@ async def test_topup_intent_hides_provider_error_details(auth_client):
         json={"legal_name": "Razorpay Failure Test", "display_name": "RFT"},
     )
     merchant_id = response.json()["id"]
+    await verify_merchant(merchant_id)
 
     with patch(
         "app.routers.wallet.create_order",
@@ -315,7 +321,7 @@ async def test_topup_intent_hides_provider_error_details(auth_client):
         response = await auth_client.post(
             "/api/v1/merchant/wallet/topup/intent",
             headers={"X-Merchant-Id": merchant_id},
-            json={"amount": 100},
+            json={"amount": 500},
         )
 
     assert response.status_code == 500
@@ -323,7 +329,7 @@ async def test_topup_intent_hides_provider_error_details(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_topup_confirm_credits_wallet_when_signature_valid(auth_client, db_session):
+async def test_topup_confirm_credits_wallet_when_signature_valid(auth_client, db_session, verify_merchant):
     from unittest.mock import patch
     from sqlalchemy import select
     from decimal import Decimal
@@ -334,6 +340,7 @@ async def test_topup_confirm_credits_wallet_when_signature_valid(auth_client, db
         "/api/v1/merchants/", json={"legal_name": "Confirm Test", "display_name": "CT"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Manually seed a pending transaction
     txn = Transaction(
@@ -368,7 +375,7 @@ async def test_topup_confirm_credits_wallet_when_signature_valid(auth_client, db
 
 
 @pytest.mark.asyncio
-async def test_topup_confirm_idempotent_returns_existing(auth_client, db_session):
+async def test_topup_confirm_idempotent_returns_existing(auth_client, db_session, verify_merchant):
     from unittest.mock import patch
     from sqlalchemy import select
     from decimal import Decimal
@@ -379,6 +386,7 @@ async def test_topup_confirm_idempotent_returns_existing(auth_client, db_session
         "/api/v1/merchants/", json={"legal_name": "Idem Test", "display_name": "IT2"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Seed an already-credited transaction
     txn = Transaction(
@@ -413,7 +421,7 @@ async def test_topup_confirm_idempotent_returns_existing(auth_client, db_session
 
 
 @pytest.mark.asyncio
-async def test_topup_confirm_bad_signature_returns_400(auth_client, db_session):
+async def test_topup_confirm_bad_signature_returns_400(auth_client, db_session, verify_merchant):
     from unittest.mock import patch
     from decimal import Decimal
     import uuid as uuid_mod
@@ -423,6 +431,7 @@ async def test_topup_confirm_bad_signature_returns_400(auth_client, db_session):
         "/api/v1/merchants/", json={"legal_name": "Bad Sig", "display_name": "BS"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     txn = Transaction(
         merchant_id=uuid_mod.UUID(mid),
@@ -448,7 +457,7 @@ async def test_topup_confirm_bad_signature_returns_400(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, db_session):
+async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, db_session, verify_merchant):
     from sqlalchemy import select
     from decimal import Decimal
     import uuid as uuid_mod
@@ -463,6 +472,7 @@ async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, d
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Wallet starts at 0 (below default threshold of 500)
     r = await auth_client.post(
@@ -494,7 +504,7 @@ async def test_publish_product_blocks_when_wallet_below_threshold(auth_client, d
 
 
 @pytest.mark.asyncio
-async def test_balance_history_unified_and_filtered(auth_client, db_session):
+async def test_balance_history_unified_and_filtered(auth_client, db_session, verify_merchant):
     import uuid as uuid_mod
     from decimal import Decimal
     from datetime import datetime, timedelta, timezone
@@ -508,6 +518,7 @@ async def test_balance_history_unified_and_filtered(auth_client, db_session):
         "/api/v1/merchants/", json={"legal_name": "History Test", "display_name": "HT"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
     m_uuid = uuid_mod.UUID(mid)
 
     # 1. Create a product
@@ -622,7 +633,7 @@ async def test_balance_history_unified_and_filtered(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_redeem_promo_code_and_referral_code(auth_client, db_session):
+async def test_redeem_promo_code_and_referral_code(auth_client, db_session, verify_merchant):
     import uuid as uuid_mod
     from sqlalchemy import select
     from app.models.wallet import Wallet
@@ -637,6 +648,7 @@ async def test_redeem_promo_code_and_referral_code(auth_client, db_session):
         "/api/v1/merchants/", json={"legal_name": "Merchant A", "display_name": "Merchant A"}
     )
     mid_a = r1.json()["id"]
+    await verify_merchant(mid_a)
 
     # Create user_2 for Merchant B
     user_2 = User(
@@ -658,6 +670,7 @@ async def test_redeem_promo_code_and_referral_code(auth_client, db_session):
             "/api/v1/merchants/", json={"legal_name": "Merchant B", "display_name": "Merchant B"}
         )
         mid_b = r2.json()["id"]
+        await verify_merchant(mid_b)
         ref_code_b = r2.json()["referral_code"]
 
         # 1. Self redemption should fail

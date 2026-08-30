@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, or_, and_
 
 from app.models.wallet import Transaction, Wallet
@@ -19,7 +19,11 @@ from app.schemas.wallet import (
     RedeemResponse,
 )
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext, get_primary_merchant_id
+from app.utils.merchant_context import (
+    CurrentMerchantContext,
+    get_primary_merchant_id,
+    require_verified_merchant,
+)
 
 
 async def _notify_merchant_members(
@@ -43,7 +47,11 @@ async def _notify_merchant_members(
             payload=payload,
         ))
 
-router = APIRouter(prefix="/merchant/wallet", tags=["merchant-wallet"])
+router = APIRouter(
+    prefix="/merchant/wallet",
+    tags=["merchant-wallet"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 
 async def _get_wallet_or_404(db, merchant_id: uuid.UUID) -> Wallet:

@@ -137,5 +137,7 @@ async def test_merchant_cannot_self_assert_kyc(auth_client):
         f"/api/v1/merchants/{merchant_id}",
         json={"is_kyc_completed": True},
     )
-    assert response.status_code == 200, response.text
-    assert response.json()["is_kyc_completed"] is False
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == (
+        "Shop verification is required before using merchant features."
+    )

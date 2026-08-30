@@ -76,6 +76,7 @@ class SupportService:
 
     #: Whitelisted sortable (and string-filterable) fields → column expressions.
     SORTABLE: dict[str, ColumnElement] = {
+        "reference": SupportTicket.reference,
         "subject": SupportTicket.subject,
         "status": SupportTicket.status,
         "priority": SupportTicket.priority,
@@ -85,7 +86,7 @@ class SupportService:
     }
 
     #: Columns OR-matched (ILIKE) against the free-text search term (R17.1).
-    SEARCHABLE: list[ColumnElement] = [SupportTicket.subject]
+    SEARCHABLE: list[ColumnElement] = [SupportTicket.reference, SupportTicket.subject]
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db

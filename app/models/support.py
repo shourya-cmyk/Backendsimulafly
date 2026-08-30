@@ -1,4 +1,6 @@
 import enum
+import secrets
+import string
 import uuid
 from datetime import datetime
 
@@ -32,10 +34,20 @@ class SupportMessageAuthorType(str, enum.Enum):
     REQUESTER = "requester"
 
 
+SUPPORT_REFERENCE_ALPHABET = string.ascii_uppercase + string.digits
+
+
+def new_support_reference() -> str:
+    return "".join(secrets.choice(SUPPORT_REFERENCE_ALPHABET) for _ in range(6))
+
+
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reference: Mapped[str] = mapped_column(
+        String(6), unique=True, nullable=False, index=True, default=new_support_reference
+    )
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     requester_type: Mapped[str] = mapped_column(String(16), nullable=False)
     requester_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)

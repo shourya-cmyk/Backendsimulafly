@@ -12,6 +12,7 @@ from app.schemas.upload import (
 )
 from app.services.image_service import get_image, get_owned, persist_base64
 from app.utils.dependencies import CurrentUser, DBSession
+from app.utils.merchant_context import VerifiedMerchantContext
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 settings = get_settings()
@@ -66,12 +67,12 @@ async def upload_merchant_product_image(
     request: Request,
     response: Response,
     body: MerchantProductImageUploadRequest,
-    user: CurrentUser,
+    ctx: VerifiedMerchantContext,
     db: DBSession,
 ) -> MerchantProductImageOut:
     image = await persist_base64(
         db,
-        owner_id=user.id,
+        owner_id=ctx.member.user_id,
         image_base64=body.image_base64,
         media_type=body.media_type,
         source="merchant_product_images",

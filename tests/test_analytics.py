@@ -17,6 +17,7 @@ async def _seed_merchant_with_events(db_session, test_user):
         legal_name="Analytics Co",
         display_name="AN",
         referral_code=f"AN-{uuid.uuid4().hex[:6].upper()}",
+        is_kyc_completed=True,
     )
     db_session.add(m)
     await db_session.commit()
@@ -164,6 +165,7 @@ async def test_analytics_diagnostics_flags_zero_click_products(auth_client, test
         legal_name="Diag",
         display_name="DG",
         referral_code=f"DG-{uuid.uuid4().hex[:6].upper()}",
+        is_kyc_completed=True,
     )
     db_session.add(m)
     await db_session.commit()

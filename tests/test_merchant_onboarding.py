@@ -1,6 +1,8 @@
 import uuid
+from copy import deepcopy
 
 import pytest
+from pydantic import ValidationError
 
 
 def _submission(email: str):
@@ -40,10 +42,29 @@ def _submission(email: str):
         "fulfilment": {
             "methods": ["merchant_delivery", "customer_pickup"],
             "delivery_service_radius_km": 25,
-            "estimated_fulfilment_time": "2-4 business days",
+            "estimated_fulfilment_time": 4,
         },
         "information_accurate": True,
     }
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("shop", "service_radius_km", 100),
+        ("fulfilment", "delivery_service_radius_km", 100),
+        ("fulfilment", "estimated_fulfilment_time", 100),
+        ("fulfilment", "estimated_fulfilment_time", "three days"),
+    ],
+)
+def test_onboarding_numeric_fields_are_limited_to_two_digits(section, field, value):
+    from app.schemas.merchant_onboarding import MerchantOnboardingSubmission
+
+    payload = deepcopy(_submission("merchant@example.com"))
+    payload[section][field] = value
+
+    with pytest.raises(ValidationError):
+        MerchantOnboardingSubmission.model_validate(payload)
 
 
 @pytest.mark.asyncio
@@ -81,9 +102,8 @@ async def test_onboarding_is_sanitized_locked_and_required_for_activation(
         f"/api/v1/merchants/{merchant_id}",
         json={"settings": {"approval_status": "approved", "onboarding_completed": False}},
     )
-    assert tamper.status_code == 200, tamper.text
-    assert tamper.json()["settings"]["approval_status"] == "pending_verification"
-    assert tamper.json()["settings"]["onboarding_completed"] is True
+    assert tamper.status_code == 403, tamper.text
+    assert "verification" in tamper.json()["detail"].lower()
 
     before_kyc = await auth_client.post(
         f"/api/v1/merchants/{merchant_id}/verification/agreements/accept",

@@ -140,7 +140,7 @@ async def test_onboarding_handles_slug_collision(auth_client, test_user, db_sess
 
 
 @pytest.mark.asyncio
-async def test_public_merchant_returns_safe_storefront_settings(auth_client):
+async def test_public_merchant_returns_safe_storefront_settings(auth_client, verify_merchant):
     created = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -162,9 +162,10 @@ async def test_public_merchant_returns_safe_storefront_settings(auth_client):
         },
     )
     assert created.status_code == 201, created.text
+    await verify_merchant(created.json()["id"])
 
     response = await auth_client.get(
-        f"/api/v1/merchants/public/{created.json()['slug']}"
+        f"/api/v1/merchants/public/{created.json()['shop_id']}"
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -215,7 +216,7 @@ async def test_get_merchant_requires_membership(auth_client, db_session):
 async def test_patch_merchant_requires_owner_or_admin(auth_client, test_user, db_session):
     from app.models.merchant import Merchant, MerchantMember, MemberRole
 
-    m = Merchant(slug="patch", legal_name="Patch", display_name="Patch", referral_code="PCH-1")
+    m = Merchant(slug="patch", legal_name="Patch", display_name="Patch", referral_code="PCH-1", is_kyc_completed=True)
     db_session.add(m)
     await db_session.commit()
     await db_session.refresh(m)
@@ -233,11 +234,12 @@ async def test_patch_merchant_requires_owner_or_admin(auth_client, test_user, db
 
 
 @pytest.mark.asyncio
-async def test_list_members_returns_all_members_with_email(auth_client, test_user, db_session):
+async def test_list_members_returns_all_members_with_email(auth_client, test_user, db_session, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Team Test", "display_name": "Team"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.get(
         f"/api/v1/merchants/{mid}/members", headers={"X-Merchant-Id": mid}
@@ -250,7 +252,7 @@ async def test_list_members_returns_all_members_with_email(auth_client, test_use
 
 
 @pytest.mark.asyncio
-async def test_invite_existing_user_adds_membership(auth_client, test_user, db_session):
+async def test_invite_existing_user_adds_membership(auth_client, test_user, db_session, verify_merchant):
     from app.core.security import hash_password
     from app.models.user import User
 
@@ -262,6 +264,7 @@ async def test_invite_existing_user_adds_membership(auth_client, test_user, db_s
         "/api/v1/merchants/", json={"legal_name": "Inv Test", "display_name": "Inv"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.post(
         f"/api/v1/merchants/{mid}/members/invite",
@@ -275,11 +278,12 @@ async def test_invite_existing_user_adds_membership(auth_client, test_user, db_s
 
 
 @pytest.mark.asyncio
-async def test_invite_unknown_email_returns_404(auth_client):
+async def test_invite_unknown_email_returns_404(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Unk", "display_name": "Unk"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.post(
         f"/api/v1/merchants/{mid}/members/invite",
@@ -290,7 +294,7 @@ async def test_invite_unknown_email_returns_404(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_change_role_requires_owner(auth_client, db_session):
+async def test_change_role_requires_owner(auth_client, db_session, verify_merchant):
     from app.core.security import hash_password
     from app.models.user import User
     from app.models.merchant import Merchant, MerchantMember, MemberRole
@@ -300,6 +304,7 @@ async def test_change_role_requires_owner(auth_client, db_session):
         "/api/v1/merchants/", json={"legal_name": "Role Test", "display_name": "Role"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     other = User(email="other@example.com", hashed_password=hash_password("password123"))
     db_session.add(other)
@@ -332,11 +337,12 @@ async def test_change_role_requires_owner(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_remove_member_owner_cannot_remove_self(auth_client, test_user):
+async def test_remove_member_owner_cannot_remove_self(auth_client, test_user, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "Self", "display_name": "Self"}
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.delete(
         f"/api/v1/merchants/{mid}/members/{test_user.id}",
@@ -359,6 +365,7 @@ async def test_get_nearby_merchants_proximity_sorting(auth_client, db_session):
         legal_name="Close Store",
         display_name="Close",
         referral_code="SIMULA-CLOSE-1",
+        is_kyc_completed=True,
         latitude=12.9800,
         longitude=77.6000,
     )
@@ -367,6 +374,7 @@ async def test_get_nearby_merchants_proximity_sorting(auth_client, db_session):
         legal_name="Far Store",
         display_name="Far",
         referral_code="SIMULA-FAR-1",
+        is_kyc_completed=True,
         latitude=19.0760,
         longitude=72.8777,
     )

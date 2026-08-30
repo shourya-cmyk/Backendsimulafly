@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -13,9 +13,17 @@ from app.schemas.merchant_product import (
     MerchantProductUpdate,
 )
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext, get_primary_merchant_id
+from app.utils.merchant_context import (
+    CurrentMerchantContext,
+    get_primary_merchant_id,
+    require_verified_merchant,
+)
 
-router = APIRouter(prefix="/merchant/products", tags=["merchant-products"])
+router = APIRouter(
+    prefix="/merchant/products",
+    tags=["merchant-products"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 
 class PaginatedProducts(BaseModel):
@@ -95,6 +103,21 @@ async def create_product(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"You do not have access to shop ID {sid}"
             )
+
+    from app.models.merchant import Merchant
+    verified_shops_res = await db.execute(
+        select(Merchant.id).where(
+            Merchant.id.in_(target_shop_ids),
+            Merchant.is_kyc_completed.is_(True),
+        )
+    )
+    verified_shop_ids = set(verified_shops_res.scalars().all())
+    unverified_shop_ids = [str(sid) for sid in target_shop_ids if sid not in verified_shop_ids]
+    if unverified_shop_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Shop verification is required for shop IDs: {', '.join(unverified_shop_ids)}",
+        )
 
     payload = body.model_dump()
     payload.pop("shop_ids", None)
@@ -231,6 +254,7 @@ async def archive_product(
     if not product or product.merchant_id != ctx.merchant.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
     product.status = "archived"
+    product.has_simulafly_listing = False
     await db.commit()
 
 

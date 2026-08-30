@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 
@@ -13,9 +13,13 @@ from app.models.buyer_intelligence import MerchantContact, MerchantCampaign
 from app.models.lead import BuyerLead, Order
 from app.models.user import User
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext
+from app.utils.merchant_context import CurrentMerchantContext, require_verified_merchant
 
-router = APIRouter(prefix="/merchant/contacts", tags=["contacts"])
+router = APIRouter(
+    prefix="/merchant/contacts",
+    tags=["contacts"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 InviteStatusLiteral = Literal["not_invited", "invited", "joined"]
 SourceLiteral = Literal["csv", "whatsapp", "manual"]

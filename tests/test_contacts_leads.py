@@ -16,6 +16,7 @@ async def test_merged_contacts_and_leads(auth_client, test_user, db_session):
         legal_name="CRM Test Merchant",
         display_name="CRM Merchant",
         referral_code="SIMULA-CRM-1",
+        is_kyc_completed=True,
     )
     db_session.add(m)
     await db_session.commit()
@@ -108,6 +109,7 @@ async def test_bulk_offer_campaign(auth_client, test_user, db_session):
         legal_name="Bulk Test Merchant",
         display_name="Bulk Merchant",
         referral_code="SIMULA-BULK-1",
+        is_kyc_completed=True,
     )
     db_session.add(m)
     await db_session.commit()

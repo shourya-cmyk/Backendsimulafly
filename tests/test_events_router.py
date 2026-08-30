@@ -16,13 +16,20 @@ async def _seed_merchant_with_funded_wallet_and_product(db_session, test_user, s
         legal_name="Events Test",
         display_name="ET",
         referral_code=f"ET-{uuid.uuid4().hex[:6].upper()}",
+        is_kyc_completed=True,
     )
     db_session.add(m)
     await db_session.commit()
     await db_session.refresh(m)
     db_session.add(MerchantMember(merchant_id=m.id, user_id=test_user.id, role=MemberRole.OWNER.value))
     db_session.add(Wallet(merchant_id=m.id, balance=Decimal("100")))
-    p = MerchantProduct(merchant_id=m.id, sku=sku, title=f"Product {sku}", status="published")
+    p = MerchantProduct(
+        merchant_id=m.id,
+        sku=sku,
+        title=f"Product {sku}",
+        status="published",
+        has_simulafly_listing=True,
+    )
     db_session.add(p)
     db_session.add(
         PricingRule(

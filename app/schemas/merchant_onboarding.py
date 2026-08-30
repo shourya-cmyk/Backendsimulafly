@@ -67,7 +67,7 @@ class ShopDetailsInput(BaseModel):
     operating_location: str = Field(min_length=2, max_length=255)
     contact_number: str = Field(pattern=r"^\+?[0-9]{10,15}$")
     operating_hours: str = Field(min_length=3, max_length=255)
-    service_radius_km: float | None = Field(default=None, ge=0, le=1000)
+    service_radius_km: int | None = Field(default=None, ge=0, le=99)
 
     @field_validator("gstin", mode="before")
     @classmethod
@@ -77,8 +77,8 @@ class ShopDetailsInput(BaseModel):
 
 class FulfilmentInput(BaseModel):
     methods: list[FulfilmentMethod] = Field(min_length=1, max_length=4)
-    delivery_service_radius_km: float | None = Field(default=None, ge=0, le=1000)
-    estimated_fulfilment_time: str = Field(min_length=2, max_length=100)
+    delivery_service_radius_km: int | None = Field(default=None, ge=0, le=99)
+    estimated_fulfilment_time: int = Field(ge=1, le=99)
 
     @field_validator("methods")
     @classmethod

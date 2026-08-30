@@ -13,6 +13,7 @@ async def _make_merchant(db_session) -> Merchant:
         legal_name="Test Merchant",
         display_name="TM",
         referral_code=f"TM-{uuid.uuid4().hex[:6].upper()}",
+        is_kyc_completed=True,
     )
     db_session.add(m)
     await db_session.commit()
@@ -24,9 +25,9 @@ async def _make_merchant(db_session) -> Merchant:
 async def test_products_filter_by_category_and_price(auth_client, db_session):
     m = await _make_merchant(db_session)
     products = [
-        MerchantProduct(merchant_id=m.id, sku="A1", title="Cheap Sofa", category="Sofa", in_app_price=5000, status="published"),
-        MerchantProduct(merchant_id=m.id, sku="A2", title="Pricey Sofa", category="Sofa", in_app_price=25000, status="published"),
-        MerchantProduct(merchant_id=m.id, sku="A3", title="Lamp", category="Lamp", in_app_price=2000, status="published"),
+        MerchantProduct(merchant_id=m.id, sku="A1", title="Cheap Sofa", category="Sofa", in_app_price=5000, status="published", has_simulafly_listing=True),
+        MerchantProduct(merchant_id=m.id, sku="A2", title="Pricey Sofa", category="Sofa", in_app_price=25000, status="published", has_simulafly_listing=True),
+        MerchantProduct(merchant_id=m.id, sku="A3", title="Lamp", category="Lamp", in_app_price=2000, status="published", has_simulafly_listing=True),
     ]
     for p in products:
         db_session.add(p)
@@ -44,7 +45,7 @@ async def test_products_filter_by_category_and_price(auth_client, db_session):
 @pytest.mark.asyncio
 async def test_product_by_id(auth_client, db_session):
     m = await _make_merchant(db_session)
-    p = MerchantProduct(merchant_id=m.id, sku="X1", title="Table", category="Table", in_app_price=3000, status="published")
+    p = MerchantProduct(merchant_id=m.id, sku="X1", title="Table", category="Table", in_app_price=3000, status="published", has_simulafly_listing=True)
     db_session.add(p)
     await db_session.commit()
     await db_session.refresh(p)
@@ -64,3 +65,21 @@ async def test_product_by_id_draft_returns_404(auth_client, db_session):
 
     r = await auth_client.get(f"/api/v1/products/{p.id}")
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_product_removed_from_storefront_returns_404(auth_client, db_session):
+    m = await _make_merchant(db_session)
+    p = MerchantProduct(
+        merchant_id=m.id,
+        sku="HIDDEN-1",
+        title="Hidden Table",
+        status="published",
+        has_simulafly_listing=False,
+    )
+    db_session.add(p)
+    await db_session.commit()
+    await db_session.refresh(p)
+
+    response = await auth_client.get(f"/api/v1/products/{p.id}")
+    assert response.status_code == 404

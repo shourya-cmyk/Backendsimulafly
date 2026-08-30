@@ -70,12 +70,38 @@ async def get_current_merchant(
 CurrentMerchantContext = Annotated[MerchantContext, Depends(get_current_merchant)]
 
 
+def require_verified_merchant(ctx: CurrentMerchantContext) -> MerchantContext:
+    """Reject merchant feature access until the selected shop has completed KYC."""
+    if not ctx.merchant.is_kyc_completed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Shop verification is required before using merchant features.",
+        )
+    return ctx
+
+
+VerifiedMerchantContext = Annotated[MerchantContext, Depends(require_verified_merchant)]
+
+
 def require_role(*allowed_roles: str):
     """Returns a callable that raises 403 unless ctx.role is in allowed_roles.
 
     Use as a FastAPI Depends inside a route to gate by role.
     """
     def guard(ctx: CurrentMerchantContext) -> MerchantContext:
+        if ctx.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"requires role in {sorted(allowed_roles)}",
+            )
+        return ctx
+
+    return guard
+
+
+def require_verified_role(*allowed_roles: str):
+    """Require both completed shop verification and an allowed merchant role."""
+    def guard(ctx: VerifiedMerchantContext) -> MerchantContext:
         if ctx.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

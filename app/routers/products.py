@@ -6,6 +6,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
 from app.models.merchant_product import MerchantProduct
+from app.models.merchant import Merchant
 from app.schemas.merchant_product import MerchantProductOut
 from app.services.llm import get_embeddings
 from app.services.rag_service import _vector_literal
@@ -39,9 +40,12 @@ async def search(
     embedding = await get_embeddings().aembed_query(q)
     # Use halfvec cast on both sides — index is on (embedding::halfvec(3072)) halfvec_cosine_ops
     sql = text(
-        "SELECT id FROM merchant_products "
-        "WHERE embedding IS NOT NULL AND status='published' "
-        "ORDER BY embedding::halfvec(3072) <=> CAST(:q AS halfvec(3072)) LIMIT :k"
+        "SELECT mp.id FROM merchant_products AS mp "
+        "JOIN merchants AS m ON m.id = mp.merchant_id "
+        "WHERE mp.embedding IS NOT NULL AND mp.status='published' "
+        "AND mp.has_simulafly_listing = TRUE AND m.is_kyc_completed = TRUE "
+        "AND m.status != 'suspended' "
+        "ORDER BY mp.embedding::halfvec(3072) <=> CAST(:q AS halfvec(3072)) LIMIT :k"
     )
     res = await db.execute(sql, {"q": _vector_literal(embedding), "k": limit})
     ids = [row[0] for row in res.fetchall()]
@@ -49,6 +53,7 @@ async def search(
         return []
     rows = await db.execute(
         select(MerchantProduct)
+        .join(Merchant, Merchant.id == MerchantProduct.merchant_id)
         .options(
             selectinload(MerchantProduct.variants),
             selectinload(MerchantProduct.merchant),
@@ -84,11 +89,17 @@ async def list_products(
 ):
     stmt = (
         select(MerchantProduct)
+        .join(Merchant, Merchant.id == MerchantProduct.merchant_id)
         .options(
             selectinload(MerchantProduct.variants),
             selectinload(MerchantProduct.merchant),
         )
-        .where(MerchantProduct.status == "published")
+        .where(
+            MerchantProduct.status == "published",
+            MerchantProduct.has_simulafly_listing.is_(True),
+            Merchant.is_kyc_completed.is_(True),
+            Merchant.status != "suspended",
+        )
     )
     if category:
         stmt = stmt.where(MerchantProduct.category.ilike(f"%{category}%"))
@@ -115,6 +126,7 @@ async def list_products(
 async def get_product(product_id: uuid.UUID, user: CurrentUser, db: DBSession):
     stmt = (
         select(MerchantProduct)
+        .join(Merchant, Merchant.id == MerchantProduct.merchant_id)
         .options(
             selectinload(MerchantProduct.variants),
             selectinload(MerchantProduct.merchant),
@@ -122,6 +134,9 @@ async def get_product(product_id: uuid.UUID, user: CurrentUser, db: DBSession):
         .where(
             MerchantProduct.id == product_id,
             MerchantProduct.status == "published",
+            MerchantProduct.has_simulafly_listing.is_(True),
+            Merchant.is_kyc_completed.is_(True),
+            Merchant.status != "suspended",
         )
     )
     product = (await db.execute(stmt)).scalar_one_or_none()

@@ -28,6 +28,7 @@ class SupportMessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    reference: str
     ticket_id: uuid.UUID
     author_type: str
     author_id: uuid.UUID

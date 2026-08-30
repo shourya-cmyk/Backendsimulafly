@@ -116,8 +116,41 @@ def test_merchant_product_update_is_all_optional():
     assert u2.in_app_price == 9999.99
 
 
+def test_product_dimensions_require_numeric_values_and_known_units():
+    from app.schemas.merchant_product import MerchantProductCreate
+    from pydantic import ValidationError
+
+    valid = MerchantProductCreate(
+        sku="DIM-1",
+        title="Measured Product",
+        dimensions={
+            "height": 120,
+            "width": 80.5,
+            "depth": 45,
+            "unit": "cm",
+            "weight": 12.25,
+            "weight_unit": "kg",
+        },
+    )
+    assert valid.dimensions["weight_unit"] == "kg"
+
+    with pytest.raises(ValidationError):
+        MerchantProductCreate(
+            sku="DIM-2",
+            title="Bad Product",
+            dimensions={"height": "tall"},
+        )
+
+    with pytest.raises(ValidationError):
+        MerchantProductCreate(
+            sku="DIM-3",
+            title="Bad Unit",
+            dimensions={"weight": 10, "weight_unit": "stone"},
+        )
+
+
 @pytest.mark.asyncio
-async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_user, db_session):
+async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_user, db_session, verify_merchant):
     # Create a merchant first
     r = await auth_client.post(
         "/api/v1/merchants/",
@@ -129,6 +162,7 @@ async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_
     )
     assert r.status_code == 201
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Create a product
     r = await auth_client.post(
@@ -145,7 +179,7 @@ async def test_create_product_creates_draft_owned_by_merchant(auth_client, test_
 
 
 @pytest.mark.asyncio
-async def test_create_product_duplicate_sku_returns_409(auth_client):
+async def test_create_product_duplicate_sku_returns_409(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -155,6 +189,7 @@ async def test_create_product_duplicate_sku_returns_409(auth_client):
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r1 = await auth_client.post(
         "/api/v1/merchant/products/",
@@ -172,7 +207,7 @@ async def test_create_product_duplicate_sku_returns_409(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_list_products_returns_only_this_merchants_products(auth_client, db_session):
+async def test_list_products_returns_only_this_merchants_products(auth_client, db_session, verify_merchant):
     # Create two merchants, two products each
     r1 = await auth_client.post(
         "/api/v1/merchants/",
@@ -192,6 +227,7 @@ async def test_list_products_returns_only_this_merchants_products(auth_client, d
         },
     )
     m2 = r2.json()["id"]
+    await verify_merchant(m1, m2)
 
     for sku in ("M1-1", "M1-2"):
         await auth_client.post(
@@ -217,7 +253,7 @@ async def test_list_products_returns_only_this_merchants_products(auth_client, d
 
 
 @pytest.mark.asyncio
-async def test_list_products_filters_by_status_and_search(auth_client):
+async def test_list_products_filters_by_status_and_search(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -227,6 +263,7 @@ async def test_list_products_filters_by_status_and_search(auth_client):
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Create 3 products: 2 draft, 1 published
     for sku, title, status in [
@@ -260,7 +297,7 @@ async def test_list_products_filters_by_status_and_search(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_get_product_404_for_other_merchants_product(auth_client, db_session):
+async def test_get_product_404_for_other_merchants_product(auth_client, db_session, verify_merchant):
     r1 = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -279,6 +316,7 @@ async def test_get_product_404_for_other_merchants_product(auth_client, db_sessi
         },
     )
     mB = r2.json()["id"]
+    await verify_merchant(mA, mB)
 
     r = await auth_client.post(
         "/api/v1/merchant/products/",
@@ -296,7 +334,7 @@ async def test_get_product_404_for_other_merchants_product(auth_client, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_update_product_changes_fields_and_triggers_embedding(auth_client):
+async def test_update_product_changes_fields_and_triggers_embedding(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -306,6 +344,7 @@ async def test_update_product_changes_fields_and_triggers_embedding(auth_client)
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.post(
         "/api/v1/merchant/products/",
@@ -327,7 +366,7 @@ async def test_update_product_changes_fields_and_triggers_embedding(auth_client)
 
 
 @pytest.mark.asyncio
-async def test_archive_product_soft_deletes(auth_client):
+async def test_archive_product_soft_deletes(auth_client, verify_merchant):
     r = await auth_client.post(
         "/api/v1/merchants/",
         json={
@@ -337,6 +376,7 @@ async def test_archive_product_soft_deletes(auth_client):
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     r = await auth_client.post(
         "/api/v1/merchant/products/",
@@ -357,10 +397,11 @@ async def test_archive_product_soft_deletes(auth_client):
     )
     assert r.status_code == 200
     assert r.json()["status"] == "archived"
+    assert r.json()["has_simulafly_listing"] is False
 
 
 @pytest.mark.asyncio
-async def test_publish_product_transitions_status(auth_client, db_session):
+async def test_publish_product_transitions_status(auth_client, db_session, verify_merchant):
     from sqlalchemy import select
     from decimal import Decimal
     import uuid as uuid_mod
@@ -375,6 +416,7 @@ async def test_publish_product_transitions_status(auth_client, db_session):
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Fund wallet so publish passes the new wallet check
     res = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid)))
@@ -399,7 +441,7 @@ async def test_publish_product_transitions_status(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_publish_archived_product_succeeds(auth_client, db_session):
+async def test_publish_archived_product_succeeds(auth_client, db_session, verify_merchant):
     from sqlalchemy import select
     from decimal import Decimal
     import uuid as uuid_mod
@@ -414,6 +456,7 @@ async def test_publish_archived_product_succeeds(auth_client, db_session):
         },
     )
     mid = r.json()["id"]
+    await verify_merchant(mid)
 
     # Fund wallet so publish passes the wallet check
     res = await db_session.execute(select(Wallet).where(Wallet.merchant_id == uuid_mod.UUID(mid)))
@@ -443,7 +486,7 @@ async def test_publish_archived_product_succeeds(auth_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_create_product_without_onboarding_returns_403(auth_client):
+async def test_create_product_without_verification_returns_403(auth_client):
     r = await auth_client.post(
         "/api/v1/merchants/", json={"legal_name": "No Onboard Co", "display_name": "No Onboard"}
     )
@@ -456,5 +499,5 @@ async def test_create_product_without_onboarding_returns_403(auth_client):
         json={"sku": "FAIL-ONBOARD", "title": "Should Fail"},
     )
     assert r.status_code == 403
-    assert "onboarding" in r.json()["detail"].lower()
+    assert "verification" in r.json()["detail"].lower()
 

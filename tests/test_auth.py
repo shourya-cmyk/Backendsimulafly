@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 
@@ -32,6 +34,38 @@ async def test_register_duplicate_email_conflict(client):
     assert r1.status_code == 201
     r2 = await client.post("/api/v1/auth/register", json=payload)
     assert r2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_registration_does_not_send_a_second_implicit_otp(client, monkeypatch):
+    from app.routers import auth
+
+    send_email = Mock(return_value=True)
+    monkeypatch.setattr(auth, "send_otp_email", send_email)
+
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "single-otp@example.com", "password": "password123"},
+    )
+
+    assert response.status_code == 201, response.text
+    send_email.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_repeated_email_otp_requests_send_only_one_email(auth_client, monkeypatch):
+    from app.routers import auth
+
+    send_email = Mock(return_value=True)
+    monkeypatch.setattr(auth, "send_otp_email", send_email)
+
+    first = await auth_client.post("/api/v1/auth/send-otp")
+    second = await auth_client.post("/api/v1/auth/send-otp")
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert "already sent" in second.json()["message"]
+    send_email.assert_called_once()
 
 
 @pytest.mark.asyncio

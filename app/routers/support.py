@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -25,6 +25,7 @@ from app.models.support import (
     SupportTicket,
     SupportTicketPriority,
     SupportTicketStatus,
+    new_support_reference,
 )
 from app.schemas.support import (
     PaginatedSupportTickets,
@@ -32,9 +33,13 @@ from app.schemas.support import (
     SupportTicketOut,
 )
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext
+from app.utils.merchant_context import CurrentMerchantContext, require_verified_merchant
 
-router = APIRouter(prefix="/merchant/support", tags=["merchant-support"])
+router = APIRouter(
+    prefix="/merchant/support",
+    tags=["merchant-support"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 # SLA window: 48 h for new merchant tickets
 _SLA_HOURS = 48
@@ -46,6 +51,20 @@ def _build_subject(reason: str, sub_reason: str) -> str:
         return slug.replace("_", " ").title()
 
     return f"{_fmt(reason)} — {_fmt(sub_reason)}"
+
+
+async def _generate_unique_reference(db: DBSession) -> str:
+    for _ in range(20):
+        candidate = new_support_reference()
+        existing = await db.scalar(
+            select(SupportTicket.id).where(SupportTicket.reference == candidate)
+        )
+        if existing is None:
+            return candidate
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Could not allocate a support ticket reference. Please retry.",
+    )
 
 
 @router.post("/tickets/", response_model=SupportTicketOut, status_code=status.HTTP_201_CREATED)
@@ -67,6 +86,7 @@ async def create_ticket(
     sla_due = datetime.now(timezone.utc) + timedelta(hours=_SLA_HOURS)
 
     ticket = SupportTicket(
+        reference=await _generate_unique_reference(db),
         subject=_build_subject(body.reason, body.sub_reason),
         requester_type=SupportRequesterType.MERCHANT.value,
         requester_id=ctx.merchant.id,
@@ -126,16 +146,27 @@ async def list_tickets(
 
 @router.get("/tickets/{ticket_id}", response_model=SupportTicketOut)
 async def get_ticket(
-    ticket_id: uuid.UUID,
+    ticket_id: str,
     db: DBSession,
     ctx: CurrentMerchantContext,
 ) -> SupportTicket:
     """Return a single ticket owned by the authenticated merchant."""
-    ticket = await db.get(SupportTicket, ticket_id)
+    try:
+        parsed_id = uuid.UUID(ticket_id)
+    except ValueError:
+        parsed_id = None
+    stmt = select(SupportTicket).where(
+        SupportTicket.requester_type == SupportRequesterType.MERCHANT.value,
+        SupportTicket.requester_id == ctx.merchant.id,
+        SupportTicket.deleted_at.is_(None),
+    )
+    if parsed_id is not None:
+        stmt = stmt.where(SupportTicket.id == parsed_id)
+    else:
+        stmt = stmt.where(SupportTicket.reference == ticket_id.upper())
+    ticket = (await db.execute(stmt)).scalar_one_or_none()
     if (
         ticket is None
-        or ticket.deleted_at is not None
-        or ticket.requester_id != ctx.merchant.id
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.")
     return ticket

@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +24,13 @@ from app.schemas.lead import (
 )
 from app.services.billing import BillingService
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext
+from app.utils.merchant_context import CurrentMerchantContext, require_verified_merchant
 
-router = APIRouter(prefix="/merchant/leads", tags=["merchant-leads"])
+router = APIRouter(
+    prefix="/merchant/leads",
+    tags=["merchant-leads"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -31,9 +31,17 @@ from app.models.lead import BuyerLead
 from app.models.user import User
 from app.models.wallet import Wallet
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext, get_primary_merchant_id
+from app.utils.merchant_context import (
+    CurrentMerchantContext,
+    get_primary_merchant_id,
+    require_verified_merchant,
+)
 
-router = APIRouter(prefix="/merchant/buyer-intelligence", tags=["buyer-intelligence"])
+router = APIRouter(
+    prefix="/merchant/buyer-intelligence",
+    tags=["buyer-intelligence"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 UNLOCK_COST = 30  # INR per buyer reveal
 

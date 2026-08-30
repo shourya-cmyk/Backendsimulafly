@@ -27,6 +27,7 @@ class SupportTicketOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    reference: str = Field(pattern=r"^[A-Z0-9]{6}$")
     subject: str
     status: str
     priority: str

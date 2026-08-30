@@ -61,6 +61,7 @@ DBSession = Annotated[AsyncSession, Depends(get_db)]
 def _to_list_item(ticket: SupportTicket) -> SupportTicketListItem:
     return SupportTicketListItem(
         id=ticket.id,
+        reference=ticket.reference,
         subject=ticket.subject,
         requester_type=ticket.requester_type,
         requester_id=ticket.requester_id,
@@ -75,6 +76,7 @@ def _to_list_item(ticket: SupportTicket) -> SupportTicketListItem:
 def _to_detail(ticket: SupportTicket) -> SupportTicketDetail:
     return SupportTicketDetail(
         id=ticket.id,
+        reference=ticket.reference,
         subject=ticket.subject,
         requester_type=ticket.requester_type,
         requester_id=ticket.requester_id,

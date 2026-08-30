@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.models.event import BuyerEvent, LedgerEntry
@@ -15,10 +15,14 @@ from app.schemas.analytics import (
     ProductPerformanceList,
 )
 from app.utils.dependencies import DBSession
-from app.utils.merchant_context import CurrentMerchantContext
+from app.utils.merchant_context import CurrentMerchantContext, require_verified_merchant
 from app.core.config import get_settings
 
-router = APIRouter(prefix="/merchant/analytics", tags=["merchant-analytics"])
+router = APIRouter(
+    prefix="/merchant/analytics",
+    tags=["merchant-analytics"],
+    dependencies=[Depends(require_verified_merchant)],
+)
 
 
 def _parse_day(day_val):

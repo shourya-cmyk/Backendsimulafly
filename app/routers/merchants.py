@@ -20,7 +20,8 @@ from app.utils.dependencies import CurrentUser, DBSession
 from app.utils.merchant_context import (
     CurrentMerchantContext,
     MerchantContext,
-    require_role,
+    VerifiedMerchantContext,
+    require_verified_role,
     get_primary_merchant_id,
 )
 from app.utils.slug import make_unique_slug
@@ -334,7 +335,7 @@ async def update_merchant(
     merchant_id: uuid.UUID,
     body: MerchantUpdate,
     db: DBSession,
-    ctx: MerchantContext = Depends(require_role("owner", "admin")),
+    ctx: MerchantContext = Depends(require_verified_role("owner", "admin")),
 ) -> Merchant:
     if ctx.merchant.id != merchant_id:
         raise HTTPException(
@@ -379,7 +380,7 @@ async def update_merchant(
 async def get_referred_merchants(
     merchant_id: uuid.UUID,
     db: DBSession,
-    ctx: CurrentMerchantContext
+    ctx: VerifiedMerchantContext
 ) -> list[Merchant]:
     """Fetch all merchants referred by this merchant."""
     if ctx.merchant.id != merchant_id:
@@ -408,7 +409,7 @@ def _member_to_out(member: MerchantMember, user: User) -> dict:
 
 @router.get("/{merchant_id}/members", response_model=list[MerchantMemberOut])
 async def list_members(
-    merchant_id: uuid.UUID, db: DBSession, ctx: CurrentMerchantContext
+    merchant_id: uuid.UUID, db: DBSession, ctx: VerifiedMerchantContext
 ) -> list[dict]:
     if ctx.merchant.id != merchant_id:
         raise HTTPException(status_code=400, detail="merchant_id mismatch")
@@ -430,7 +431,7 @@ async def invite_member(
     merchant_id: uuid.UUID,
     body: MemberInvite,
     db: DBSession,
-    ctx: MerchantContext = Depends(require_role("owner", "admin")),
+    ctx: MerchantContext = Depends(require_verified_role("owner", "admin")),
 ) -> dict:
     if ctx.merchant.id != merchant_id:
         raise HTTPException(status_code=400, detail="merchant_id mismatch")
@@ -471,7 +472,7 @@ async def change_member_role(
     user_id: uuid.UUID,
     body: MemberRoleUpdate,
     db: DBSession,
-    ctx: MerchantContext = Depends(require_role("owner")),
+    ctx: MerchantContext = Depends(require_verified_role("owner")),
 ) -> dict:
     if ctx.merchant.id != merchant_id:
         raise HTTPException(status_code=400, detail="merchant_id mismatch")
@@ -498,7 +499,7 @@ async def remove_member(
     merchant_id: uuid.UUID,
     user_id: uuid.UUID,
     db: DBSession,
-    ctx: MerchantContext = Depends(require_role("owner")),
+    ctx: MerchantContext = Depends(require_verified_role("owner")),
 ) -> None:
     if ctx.merchant.id != merchant_id:
         raise HTTPException(status_code=400, detail="merchant_id mismatch")
@@ -533,7 +534,10 @@ async def get_nearby_merchants(
     """
     stmt = (
         select(Merchant)
-        .where(Merchant.status != "suspended")
+        .where(
+            Merchant.status != "suspended",
+            Merchant.is_kyc_completed.is_(True),
+        )
     )
     res = await db.execute(stmt)
     merchants = list(res.scalars().all())
@@ -585,17 +589,21 @@ async def get_public_merchant(
     lookup_value: str,
     db: DBSession,
 ) -> Merchant:
-    """Fetch public merchant details by UUID, slug, or referral code."""
+    """Fetch a verified public merchant by UUID, shop ID, slug, or referral code."""
     try:
         merchant_id = uuid.UUID(lookup_value)
         stmt = select(Merchant).where(Merchant.id == merchant_id)
     except ValueError:
         stmt = select(Merchant).where(
-            (Merchant.slug == lookup_value) | (Merchant.referral_code == lookup_value)
+            (Merchant.shop_id == lookup_value)
+            | (Merchant.slug == lookup_value)
+            | (Merchant.referral_code == lookup_value)
         )
     res = await db.execute(stmt)
     merchant = res.scalar_one_or_none()
     if not merchant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Merchant not found")
+    if not merchant.is_kyc_completed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Merchant not found")
     if merchant.status == "suspended":
         raise HTTPException(
@@ -609,7 +617,7 @@ async def get_public_merchant_products(
     lookup_value: str,
     db: DBSession,
 ) -> list:
-    """Fetch published merchant products by merchant UUID, slug, or referral code."""
+    """Fetch storefront-listed products by merchant UUID, shop ID, slug, or referral code."""
     from sqlalchemy.orm import selectinload
     from app.models.merchant_product import MerchantProduct
 
@@ -618,8 +626,14 @@ async def get_public_merchant_products(
         stmt = select(Merchant.id).where(Merchant.id == merchant_id)
     except ValueError:
         stmt = select(Merchant.id).where(
-            (Merchant.slug == lookup_value) | (Merchant.referral_code == lookup_value)
+            (Merchant.shop_id == lookup_value)
+            | (Merchant.slug == lookup_value)
+            | (Merchant.referral_code == lookup_value)
         )
+    stmt = stmt.where(
+        Merchant.is_kyc_completed.is_(True),
+        Merchant.status != "suspended",
+    )
     m_res = await db.execute(stmt)
     m_id = m_res.scalar_one_or_none()
     if not m_id:
@@ -631,6 +645,7 @@ async def get_public_merchant_products(
         .where(
             MerchantProduct.merchant_id == m_id,
             MerchantProduct.status == "published",
+            MerchantProduct.has_simulafly_listing.is_(True),
         )
         .order_by(MerchantProduct.created_at.desc())
     )
