@@ -633,6 +633,69 @@ async def test_balance_history_unified_and_filtered(auth_client, db_session, ver
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("linked", [True, False])
+async def test_balance_history_deduplicates_kyc_transaction_and_ledger(
+    auth_client, db_session, verify_merchant, linked
+):
+    import uuid as uuid_mod
+    from decimal import Decimal
+    from sqlalchemy import select
+    from app.models.wallet import Wallet, Transaction
+    from app.models.event import LedgerEntry
+
+    response = await auth_client.post(
+        "/api/v1/merchants/",
+        json={"legal_name": "KYC History Test", "display_name": "KYC History"},
+    )
+    merchant_id = response.json()["id"]
+    await verify_merchant(merchant_id)
+    merchant_uuid = uuid_mod.UUID(merchant_id)
+
+    wallet = (
+        await db_session.execute(
+            select(Wallet).where(Wallet.merchant_id == merchant_uuid)
+        )
+    ).scalar_one()
+    wallet.balance = Decimal("1000.00")
+
+    transaction = Transaction(
+        merchant_id=merchant_uuid,
+        amount=Decimal("1000.00"),
+        status="successful",
+        payment_method="kyc_bonus",
+        gateway="system",
+        gateway_ref=f"kyc-{uuid_mod.uuid4()}",
+    )
+    db_session.add(transaction)
+    await db_session.flush()
+    db_session.add(
+        LedgerEntry(
+            merchant_id=merchant_uuid,
+            wallet_id=wallet.id,
+            related_txn_id=transaction.id if linked else None,
+            entry_type="credit",
+            amount=Decimal("1000.00"),
+            reason="kyc_welcome_bonus",
+            balance_after=Decimal("1000.00"),
+        )
+    )
+    await db_session.commit()
+
+    response = await auth_client.get(
+        "/api/v1/merchant/wallet/balance-history",
+        headers={"X-Merchant-Id": merchant_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["id"] == f"tx_{transaction.id}"
+    assert body["items"][0]["payment_method"] == "kyc_bonus"
+    assert body["items"][0]["running_balance"] == 1000.0
+
+
+@pytest.mark.asyncio
 async def test_redeem_promo_code_and_referral_code(auth_client, db_session, verify_merchant):
     import uuid as uuid_mod
     from sqlalchemy import select

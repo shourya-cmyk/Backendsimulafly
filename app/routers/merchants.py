@@ -161,10 +161,12 @@ async def process_kyc_welcome_bonus(db, merchant: Merchant):
         gateway_ref=f"KYC-{uuid.uuid4()}"
     )
     db.add(tx)
+    await db.flush()
 
     ledger = LedgerEntry(
         merchant_id=merchant.id,
         wallet_id=wallet.id,
+        related_txn_id=tx.id,
         entry_type="credit",
         amount=Decimal("1000.00"),
         reason="kyc_welcome_bonus",

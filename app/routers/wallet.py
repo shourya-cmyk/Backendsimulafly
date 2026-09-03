@@ -305,6 +305,13 @@ async def get_balance_history(
 
     # 4. Map to unified balance history format
     items = []
+    # A balance change can have both a Transaction (payment/audit record) and a
+    # LedgerEntry (accounting record). When both are returned, they represent
+    # one wallet movement and must render as one history item.
+    visible_transaction_ids = {tx.id for tx in txs}
+    legacy_kyc_bonus_amounts = {
+        tx.amount for tx in txs if tx.payment_method == "kyc_bonus"
+    }
     for tx in txs:
         items.append({
             "id": f"tx_{tx.id}",
@@ -324,6 +331,17 @@ async def get_balance_history(
         p_title = row[2]
         p_sku = row[3]
         p_img = row[4]
+
+        if ledg.related_txn_id in visible_transaction_ids:
+            continue
+        # KYC bonus rows created before related_txn_id was populated still have
+        # a matching successful transaction. Suppress that legacy ledger copy.
+        if (
+            ledg.related_txn_id is None
+            and ledg.reason == "kyc_welcome_bonus"
+            and ledg.amount in legacy_kyc_bonus_amounts
+        ):
+            continue
 
         # Map display name of event type
         if be_type == "ai_rag_mention":
