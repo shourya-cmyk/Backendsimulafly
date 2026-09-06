@@ -148,14 +148,13 @@ async def update_lead(
 
         if body.status == LeadStatus.CONVERTED.value:
             lead.converted_at = datetime.now(timezone.utc)
-            # Complete the order + bill the simulafly_purchase fee
+            # Completion is fulfillment-only; the platform fee was charged
+            # when the merchant accepted the order.
             res = await db.execute(select(Order).where(Order.lead_id == lead.id))
             order = res.scalar_one_or_none()
             if order and order.status != OrderStatus.COMPLETED.value:
                 order.status = OrderStatus.COMPLETED.value
                 order.completed_at = datetime.now(timezone.utc)
-                svc = BillingService(db)
-                await svc.transaction_fee_on_conversion(order=order)
             
             # Credit user ₹20 on conversion
             user_obj = await db.get(User, lead.user_id)
@@ -174,10 +173,15 @@ async def update_lead(
             db.add(notif)
 
         elif body.status == LeadStatus.SYNCED.value:
-            res = await db.execute(select(Order).where(Order.lead_id == lead.id))
+            res = await db.execute(
+                select(Order).where(Order.lead_id == lead.id).with_for_update()
+            )
             order = res.scalar_one_or_none()
             if order and order.status == OrderStatus.PENDING_MERCHANT_CONTACT.value:
                 order.status = OrderStatus.CONTACTED.value
+                order.accepted_at = datetime.now(timezone.utc)
+                svc = BillingService(db)
+                await svc.transaction_fee_on_acceptance(order=order)
                 
                 # Create order contacted notification
                 from app.models.notification import Notification

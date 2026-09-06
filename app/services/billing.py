@@ -13,6 +13,7 @@ Pause logic is eventually-consistent per spec §2.4.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select, update
@@ -142,16 +143,33 @@ class BillingService:
         self.db.add(ledger)
         await self.db.flush()
 
-    async def transaction_fee_on_conversion(self, *, order: "Order") -> None:
-        """Deduct flat 100 INR order confirmation fee when an order completes/is confirmed."""
-        from decimal import Decimal
-        amount = Decimal("100.00")
-        await self._deduct(
-            merchant_id=order.merchant_id,
-            amount=amount,
-            reason="order_confirmation",
+    async def transaction_fee_on_acceptance(self, *, order: "Order") -> Decimal:
+        """Charge the admin-configured purchase fee once when an order is accepted."""
+        if order.fee_charged_at is not None:
+            return order.platform_fee_amount
+
+        rate, rate_type = await resolve_rate(
+            self.db,
+            "simulafly_purchase",
+            order.merchant_id,
         )
-        # Note: caller (leads router) calls db.commit() after this
+        amount = rate
+        if rate_type == "percentage":
+            amount = (order.total_estimated * rate / Decimal("100")).quantize(
+                Decimal("0.0001")
+            )
+
+        if amount > 0:
+            await self._deduct(
+                merchant_id=order.merchant_id,
+                amount=amount,
+                reason="order_confirmation",
+            )
+
+        order.platform_fee_amount = amount
+        order.fee_charged_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return amount
 
     async def pause_if_depleted_for(self, merchant_id: uuid.UUID) -> None:
         """Eventual pause check (called from BackgroundTasks after each deduction)."""

@@ -30,6 +30,7 @@ class BuyerLeadCreate(BaseModel):
     delivery_latitude: float | None = None
     delivery_longitude: float | None = None
     coupon_code: str | None = Field(default=None, max_length=50)
+    # Kept for backwards-compatible clients; the server always recalculates it.
     discount_amount: Decimal | None = None
     items: list[OrderItemIn] = Field(default_factory=list)
 
@@ -71,7 +72,13 @@ class OrderOut(BaseModel):
     id: uuid.UUID
     status: str
     items: list[dict]
+    subtotal_estimated: Decimal
     total_estimated: Decimal
+    coupon_code: str | None = None
+    discount_amount: Decimal
+    accepted_at: datetime | None = None
+    fee_charged_at: datetime | None = None
+    platform_fee_amount: Decimal
     completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

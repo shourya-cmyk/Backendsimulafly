@@ -42,7 +42,7 @@ class MerchantBuyerAccess(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    unlock_cost: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=30)
+    unlock_cost: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=50)
     unlocked_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
 

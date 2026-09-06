@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,12 +17,15 @@ class DiscountType(str, enum.Enum):
 
 class MerchantCoupon(Base):
     __tablename__ = "merchant_coupons"
+    __table_args__ = (
+        UniqueConstraint("merchant_id", "code", name="uq_merchant_coupons_merchant_code"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    merchant_id: Mapped[uuid.UUID | None] = mapped_column(
+    merchant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("merchants.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

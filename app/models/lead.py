@@ -141,10 +141,31 @@ class Order(Base):
     total_estimated: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), nullable=False, default=Decimal("0")
     )
+    subtotal_estimated: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal("0")
+    )
+    coupon_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("merchant_coupons.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    coupon_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    discount_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal("0")
+    )
     delivery_address: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     merchant_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    fee_charged_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    platform_fee_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 4), nullable=False, default=Decimal("0")
     )
 
     # --- Admin booking operations (additive, nullable/defaulted) ---

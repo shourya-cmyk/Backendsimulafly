@@ -21,6 +21,7 @@ from app.schemas.lead import (
     OrderOut,
     PaginatedLeads,
 )
+from app.services.coupons import check_coupon
 from app.utils.dependencies import CurrentUser, DBSession
 
 router = APIRouter(prefix="/buyer/leads", tags=["buyer-leads"])
@@ -67,7 +68,7 @@ async def submit_lead(
             }
             for i in body.items
         ]
-        total = sum(
+        subtotal = sum(
             Decimal(str(i.price_at_capture)) * i.qty for i in body.items
         )
     else:
@@ -83,10 +84,31 @@ async def submit_lead(
                 "sku": product.sku,
             }
         ]
-        total = Decimal(str(product.in_app_price or 0))
+        subtotal = Decimal(str(product.in_app_price or 0))
 
-    if body.discount_amount and body.discount_amount > 0:
-        total = max(Decimal("0.0"), total - body.discount_amount)
+    applied_coupon = None
+    discount_amount = Decimal("0")
+    if body.coupon_code:
+        coupon_check = await check_coupon(
+            db,
+            code=body.coupon_code,
+            merchant_id=product.merchant_id,
+            order_amount=subtotal,
+            lock=True,
+        )
+        if not coupon_check.valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=coupon_check.reason,
+            )
+        applied_coupon = coupon_check.coupon
+        assert applied_coupon is not None
+        discount_amount = coupon_check.discount_amount
+        applied_coupon.used_count += 1
+
+    # Never trust the client-supplied discount amount. The server calculates it
+    # from the merchant-owned coupon record above.
+    total = max(Decimal("0"), subtotal - discount_amount)
 
     lead = BuyerLead(
         merchant_id=product.merchant_id,
@@ -109,7 +131,11 @@ async def submit_lead(
         user_id=user.id,
         status=OrderStatus.PENDING_MERCHANT_CONTACT.value,
         items=items_payload,
+        subtotal_estimated=subtotal,
         total_estimated=total,
+        coupon_id=applied_coupon.id if applied_coupon else None,
+        coupon_code=applied_coupon.code if applied_coupon else None,
+        discount_amount=discount_amount,
         delivery_address={
             "city": lead.delivery_city,
             "phone": lead.delivery_phone,
@@ -178,7 +204,13 @@ async def submit_lead(
             id=order.id,
             status=order.status,
             items=order.items,
+            subtotal_estimated=order.subtotal_estimated,
             total_estimated=order.total_estimated,
+            coupon_code=order.coupon_code,
+            discount_amount=order.discount_amount,
+            accepted_at=None,
+            fee_charged_at=None,
+            platform_fee_amount=order.platform_fee_amount,
             completed_at=None,
             created_at=order.created_at,
             updated_at=order.updated_at,

@@ -4,7 +4,7 @@ High-intent ShopperFeed:
   GET  /merchant/buyer-intelligence/       — paginated list of shoppers who
        interacted with this merchant's products, with computed intent score.
        Non-unlocked shoppers only show city.
-  POST /merchant/buyer-intelligence/{user_id}/unlock — deduct ₹30, reveal contact.
+  POST /merchant/buyer-intelligence/{user_id}/unlock — deduct the configured fee, reveal contact.
   GET  /merchant/buyer-intelligence/unlocked          — already-unlocked contacts.
 
 Intent score formula (per-user, per-merchant):
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -30,6 +31,7 @@ from app.models.event import BuyerEvent
 from app.models.lead import BuyerLead
 from app.models.user import User
 from app.models.wallet import Wallet
+from app.services.pricing import resolve_rate
 from app.utils.dependencies import DBSession
 from app.utils.merchant_context import (
     CurrentMerchantContext,
@@ -43,7 +45,24 @@ router = APIRouter(
     dependencies=[Depends(require_verified_merchant)],
 )
 
-UNLOCK_COST = 30  # INR per buyer reveal
+DEFAULT_UNLOCK_COST = Decimal("50.00")
+
+
+async def _resolve_unlock_cost(db: DBSession, merchant_id: uuid.UUID) -> Decimal:
+    """Return the admin-configured flat buyer-intelligence unlock price."""
+    rate, rate_type = await resolve_rate(db, "lead_unlocked", merchant_id)
+    if rate_type != "fixed":
+        return DEFAULT_UNLOCK_COST
+    return rate
+
+
+def _uuid_param(db: DBSession, value: uuid.UUID) -> uuid.UUID | str:
+    """Bind UUIDs correctly for both PostgreSQL and the SQLite test database."""
+    return value.hex if db.get_bind().dialect.name == "sqlite" else value
+
+
+def _as_uuid(value: uuid.UUID | str) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
 
 # Intent weights
 _WEIGHTS: dict[str, int] = {
@@ -82,6 +101,7 @@ class ShopperOut(BaseModel):
     intent_tier: str
     interaction_count: int
     unlocked: bool
+    unlock_cost: float
     # per-event-type counts
     click_count: int = 0
     rag_count: int = 0
@@ -94,6 +114,7 @@ class PaginatedShoppers(BaseModel):
     total: int
     limit: int
     offset: int
+    unlock_cost: float
 
 
 class UnlockResponse(BaseModel):
@@ -107,6 +128,7 @@ class UnlockResponse(BaseModel):
     intent_tier: str
     interaction_count: int
     unlocked: bool = True
+    unlock_cost: float
     click_count: int
     rag_count: int
     image_count: int
@@ -127,6 +149,7 @@ async def _aggregate_shoppers(
             COUNT(*) FILTER (WHERE be.event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE be.event_type = 'ai_rag_mention') AS rag_count,
             COUNT(*) FILTER (WHERE be.event_type = 'ai_image_generation') AS image_count,
+            COUNT(*) FILTER (WHERE be.event_type = 'external_redirect') AS redirect_count,
             COUNT(*) AS total_interactions
         FROM buyer_events be
         WHERE be.merchant_id = :mid
@@ -140,7 +163,7 @@ async def _aggregate_shoppers(
         ) DESC
         """
     )
-    res = await db.execute(sql, {"mid": merchant_id, "since": since})
+    res = await db.execute(sql, {"mid": _uuid_param(db, merchant_id), "since": since})
     return [dict(r._mapping) for r in res.fetchall()]
 
 
@@ -153,13 +176,20 @@ async def list_shoppers(
     since_days: int = Query(default=30, ge=1, le=90),
 ) -> dict:
     rows = await _aggregate_shoppers(db, ctx.merchant.id, since_days)
+    unlock_cost = await _resolve_unlock_cost(db, ctx.merchant.id)
     total = len(rows)
     page = rows[offset: offset + limit]
 
     if not page:
-        return {"items": [], "total": total, "limit": limit, "offset": offset}
+        return {
+            "items": [],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "unlock_cost": float(unlock_cost),
+        }
 
-    user_ids = [r["user_id"] for r in page]
+    user_ids = [_as_uuid(r["user_id"]) for r in page]
 
     # Fetch user profiles
     users_res = await db.execute(select(User).where(User.id.in_(user_ids)))
@@ -189,7 +219,7 @@ async def list_shoppers(
 
     items: list[ShopperOut] = []
     for r in page:
-        uid = r["user_id"]
+        uid = _as_uuid(r["user_id"])
         user = users_by_id.get(uid)
         if not user:
             continue
@@ -214,6 +244,7 @@ async def list_shoppers(
                 intent_tier=tier,
                 interaction_count=int(r["total_interactions"]),
                 unlocked=is_unlocked,
+                unlock_cost=float(unlock_cost),
                 click_count=int(r["click_count"]),
                 rag_count=int(r["rag_count"]),
                 image_count=int(r["image_count"]),
@@ -221,7 +252,13 @@ async def list_shoppers(
             )
         )
 
-    return {"items": items, "total": total, "limit": limit, "offset": offset}
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "unlock_cost": float(unlock_cost),
+    }
 
 
 @router.post("/{user_id}/unlock", response_model=UnlockResponse)
@@ -240,19 +277,27 @@ async def unlock_shopper(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already unlocked")
 
-    # Calculate unlock cost based on intent score
+    # Calculate intent score and load the merchant's admin-configured unlock fee.
     since = datetime.now(timezone.utc) - timedelta(days=30)
     sql = text(
         """
         SELECT
             COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
-            COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count
+            COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
+            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count
         FROM buyer_events
         WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
         """
     )
-    ev_res = await db.execute(sql, {"mid": ctx.merchant.id, "uid": user_id, "since": since})
+    ev_res = await db.execute(
+        sql,
+        {
+            "mid": _uuid_param(db, ctx.merchant.id),
+            "uid": _uuid_param(db, user_id),
+            "since": since,
+        },
+    )
     ev_row = ev_res.fetchone()
     
     click_count = 0
@@ -270,22 +315,21 @@ async def unlock_shopper(
         ("ai_image_generation", image_count),
     ]
     score = _intent_score(events)
-    unlock_cost = 30 if score >= 81 else 15
+    unlock_cost = await _resolve_unlock_cost(db, ctx.merchant.id)
 
     # Check wallet balance
     wallet_res = await db.execute(
         select(Wallet).where(Wallet.merchant_id == ctx.merchant.id)
     )
     wallet = wallet_res.scalar_one_or_none()
-    if not wallet or float(wallet.balance) < unlock_cost:
+    if not wallet or wallet.balance < unlock_cost:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"insufficient wallet balance; need ₹{unlock_cost}",
         )
 
     # Deduct from wallet
-    from decimal import Decimal
-    wallet.balance = wallet.balance - Decimal(str(unlock_cost))
+    wallet.balance = wallet.balance - unlock_cost
 
     # Record unlock (we keep ctx.merchant.id for tracing unlock source)
     access = MerchantBuyerAccess(
@@ -301,7 +345,7 @@ async def unlock_shopper(
         merchant_id=ctx.merchant.id,
         wallet_id=wallet.id,
         entry_type="deduction",
-        amount=Decimal(str(-unlock_cost)),
+        amount=-unlock_cost,
         reason="buyer_intel_unlock",
         balance_after=wallet.balance,
         notes=f"Unlocked buyer profile ({user_id}) with intent score {score}"
@@ -340,12 +384,20 @@ async def unlock_shopper(
             COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
+            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count,
             COUNT(*) AS total_interactions
         FROM buyer_events
         WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
         """
     )
-    ev_res = await db.execute(sql, {"mid": ctx.merchant.id, "uid": user_id, "since": since})
+    ev_res = await db.execute(
+        sql,
+        {
+            "mid": _uuid_param(db, ctx.merchant.id),
+            "uid": _uuid_param(db, user_id),
+            "since": since,
+        },
+    )
     ev = dict(ev_res.fetchone()._mapping)
     events = [
         ("click", ev["click_count"]),
@@ -365,6 +417,7 @@ async def unlock_shopper(
         intent_label=label,
         intent_tier=tier,
         interaction_count=int(ev["total_interactions"]),
+        unlock_cost=float(unlock_cost),
         click_count=int(ev["click_count"]),
         rag_count=int(ev["rag_count"]),
         image_count=int(ev["image_count"]),
@@ -395,6 +448,7 @@ class ShopperDetailResponse(BaseModel):
     intent_label: str
     intent_tier: str
     unlocked: bool
+    unlock_cost: float
     interaction_count: int
     click_count: int = 0
     rag_count: int = 0
@@ -415,6 +469,7 @@ async def shopper_detail(
     ctx: CurrentMerchantContext,
 ) -> dict:
     mid = ctx.merchant.id
+    unlock_cost = await _resolve_unlock_cost(db, mid)
 
     # Fetch user
     user = await db.get(User, user_id)
@@ -447,12 +502,20 @@ async def shopper_detail(
             COUNT(*) FILTER (WHERE event_type = 'click') AS click_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_rag_mention') AS rag_count,
             COUNT(*) FILTER (WHERE event_type = 'ai_image_generation') AS image_count,
+            COUNT(*) FILTER (WHERE event_type = 'external_redirect') AS redirect_count,
             COUNT(*) AS total_interactions
         FROM buyer_events
         WHERE merchant_id = :mid AND user_id = :uid AND created_at >= :since
         """
     )
-    ev_res = await db.execute(sql, {"mid": mid, "uid": user_id, "since": since})
+    ev_res = await db.execute(
+        sql,
+        {
+            "mid": _uuid_param(db, mid),
+            "uid": _uuid_param(db, user_id),
+            "since": since,
+        },
+    )
     ev = dict(ev_res.fetchone()._mapping)
     events = [
         ("click", ev["click_count"]),
@@ -572,6 +635,7 @@ async def shopper_detail(
         "intent_label": label,
         "intent_tier": tier,
         "unlocked": is_unlocked,
+        "unlock_cost": float(unlock_cost),
         "interaction_count": int(ev["total_interactions"]),
         "click_count": int(ev["click_count"]),
         "rag_count": int(ev["rag_count"]),
